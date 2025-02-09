@@ -1,6 +1,7 @@
 # pin
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/yarlson/pin.svg)](https://pkg.go.dev/github.com/yarlson/pin)
+[![codecov](https://codecov.io/gh/yarlson/pin/branch/main/graph/badge.svg)](https://codecov.io/gh/yarlson/pin)
 
 `pin` is a lightweight, customizable terminal spinner library for Go applications. It provides an elegant way to show progress and status in CLI applications with support for colors, custom symbols, and flexible positioning.
 
