@@ -100,7 +100,7 @@ type Pin struct {
 	frames          []rune
 	current         int
 	message         string
-	messageMu       sync.RWMutex // Add mutex for message field
+	messageMu       sync.RWMutex
 	stopChan        chan struct{}
 	isRunning       bool
 	spinnerColor    Color
@@ -112,7 +112,7 @@ type Pin struct {
 	separator       string
 	separatorColor  Color
 	separatorAlpha  float32
-	position        Position // New field for position
+	position        Position
 }
 
 // braille patterns for spinning animation
@@ -160,7 +160,7 @@ func New(message string) *Pin {
 		separator:       "›",
 		separatorColor:  ColorWhite,
 		separatorAlpha:  0.5,
-		position:        PositionLeft, // Default to left position
+		position:        PositionLeft,
 	}
 }
 
