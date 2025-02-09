@@ -2,6 +2,7 @@ package pin_test
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"strings"
@@ -45,7 +46,7 @@ func TestBasicUsage(t *testing.T) {
 	p := pin.New("Loading")
 
 	output := captureOutput(func() {
-		p.Start()
+		p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Done")
 	})
@@ -71,7 +72,7 @@ func TestCustomization(t *testing.T) {
 	p.SetPosition(pin.PositionRight)
 
 	output := captureOutput(func() {
-		p.Start()
+		p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Complete")
 	})
@@ -100,7 +101,7 @@ func TestMessageUpdate(t *testing.T) {
 	}
 
 	captureAndStore(func() {
-		p.Start()
+		p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 	})
 
@@ -131,7 +132,7 @@ func TestSeparatorAlpha(t *testing.T) {
 	p.SetSeparatorAlpha(0.5)
 
 	output := captureOutput(func() {
-		p.Start()
+		p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Done")
 	})
@@ -149,8 +150,8 @@ func TestMultipleStarts(t *testing.T) {
 	p := pin.New("Testing")
 
 	output := captureOutput(func() {
-		p.Start()
-		p.Start()
+		p.Start(context.Background())
+		p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Done")
 	})
@@ -178,7 +179,7 @@ func TestStopWithoutMessage(t *testing.T) {
 	p := pin.New("Testing")
 
 	output := captureOutput(func() {
-		p.Start()
+		p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop()
 	})
@@ -194,7 +195,7 @@ func TestPositionSwitching(t *testing.T) {
 
 	leftOutput := captureOutput(func() {
 		p.SetPosition(pin.PositionLeft)
-		p.Start()
+		p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Done")
 	})
@@ -202,7 +203,7 @@ func TestPositionSwitching(t *testing.T) {
 	p = pin.New("Testing")
 	rightOutput := captureOutput(func() {
 		p.SetPosition(pin.PositionRight)
-		p.Start()
+		p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Done")
 	})
@@ -235,7 +236,7 @@ func TestAllColors(t *testing.T) {
 		p.SetDoneSymbolColor(color)
 
 		output := captureOutput(func() {
-			p.Start()
+			p.Start(context.Background())
 			time.Sleep(250 * time.Millisecond)
 			p.Stop("Done")
 		})
@@ -268,7 +269,7 @@ func TestSeparatorAlphaValues(t *testing.T) {
 			p.SetSeparatorAlpha(tc.alpha)
 
 			output := captureOutput(func() {
-				p.Start()
+				p.Start(context.Background())
 				time.Sleep(250 * time.Millisecond)
 				p.Stop("Done")
 			})
@@ -289,4 +290,21 @@ func TestSeparatorAlphaValues(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStartCancellation(t *testing.T) {
+	// Create a new spinner with a test message.
+	p := pin.New("Testing spinner")
+
+	// Create a cancellable context.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start the spinner with the cancellable context.
+	_ = p.Start(ctx)
+
+	// Cancel the context to trigger the ctx.Done() branch.
+	cancel()
+
+	// Allow some time for the goroutine to process the cancellation.
+	time.Sleep(150 * time.Millisecond)
 }

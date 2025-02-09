@@ -3,7 +3,8 @@
 // Example usage:
 //
 //	p := pin.New("Loading...")
-//	p.Start()
+//	cancel := p.Start(context.Background())
+//	defer cancel()
 //	// ... do some work ...
 //	p.Stop("Done!")
 //
@@ -15,7 +16,8 @@
 //	p.SetSpinnerColor(pin.ColorBlue)
 //	p.SetTextColor(pin.ColorCyan)
 //	p.SetPrefixColor(pin.ColorYellow)
-//	p.Start()
+//	cancel := p.Start(context.Background())
+//	defer cancel()
 //	// ... do some work ...
 //	p.Stop("Completed successfully")
 //
@@ -23,7 +25,8 @@
 //
 //	p := pin.New("Uploading")
 //	p.SetPosition(pin.PositionRight)
-//	p.Start()
+//	cancel := p.Start(context.Background())
+//	defer cancel()
 //	// ... do some work ...
 //	p.UpdateMessage("Almost done...")
 //	// ... do more work ...
@@ -31,6 +34,7 @@
 package pin
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -115,33 +119,8 @@ type Pin struct {
 	position        Position
 }
 
-// braille patterns for spinning animation
 var defaultFrames = []rune{
 	'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏',
-}
-
-// getColorCode returns the ANSI color code for the given color
-func (c Color) getColorCode() string {
-	switch c {
-	case ColorBlack:
-		return "\033[30m"
-	case ColorRed:
-		return "\033[31m"
-	case ColorGreen:
-		return "\033[32m"
-	case ColorYellow:
-		return "\033[33m"
-	case ColorBlue:
-		return "\033[34m"
-	case ColorMagenta:
-		return "\033[35m"
-	case ColorCyan:
-		return "\033[36m"
-	case ColorWhite:
-		return "\033[37m"
-	default:
-		return ""
-	}
 }
 
 // New creates a new Pin instance with the given message.
@@ -215,37 +194,32 @@ func (p *Pin) SetSeparatorAlpha(alpha float32) {
 	p.separatorAlpha = alpha
 }
 
-// getSeparatorColorCode returns the color code with alpha applied
-func (p *Pin) getSeparatorColorCode() string {
-	if p.separatorColor == ColorDefault {
-		return ""
-	}
-
-	// Convert regular color to dim color (alpha effect) if alpha is less than 1
-	if p.separatorAlpha < 1 {
-		return "\033[2m" + p.separatorColor.getColorCode()
-	}
-	return p.separatorColor.getColorCode()
-}
-
 // SetPosition sets whether the spinner appears before or after the message.
 func (p *Pin) SetPosition(pos Position) {
 	p.position = pos
 }
 
-// Start begins the spinner animation.
-func (p *Pin) Start() {
+// Start begins the spinner animation using the provided context.
+// It returns a cancel function which, when called, will stop the spinner.
+// Note: Canceling the returned function stops the spinner without printing
+// a final message. To print a final message, use the Stop() method.
+func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 	if p.isRunning {
-		return
+		return func() {}
 	}
 	p.isRunning = true
 
+	ctx, cancel := context.WithCancel(ctx)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	go func() {
 		defer ticker.Stop()
 		for {
 			select {
 			case <-p.stopChan:
+				return
+			case <-ctx.Done():
+				p.isRunning = false
+				fmt.Print("\r\033[K")
 				return
 			case <-ticker.C:
 				spinnerColorCode := p.spinnerColor.getColorCode()
@@ -289,6 +263,8 @@ func (p *Pin) Start() {
 			}
 		}
 	}()
+
+	return cancel
 }
 
 // Stop halts the spinner animation and optionally displays a final message.
@@ -299,10 +275,8 @@ func (p *Pin) Stop(message ...string) {
 	p.isRunning = false
 	p.stopChan <- struct{}{}
 
-	// Clear the entire line and return cursor to start
 	fmt.Print("\r\033[K")
 
-	// If a final message was provided, display it with the done symbol
 	if len(message) > 0 {
 		prefixColorCode := p.prefixColor.getColorCode()
 		symbolColorCode := p.doneSymbolColor.getColorCode()
@@ -345,4 +319,40 @@ func (p *Pin) UpdateMessage(message string) {
 	p.messageMu.Lock()
 	p.message = message
 	p.messageMu.Unlock()
+}
+
+// getSeparatorColorCode returns the color code with alpha applied
+func (p *Pin) getSeparatorColorCode() string {
+	if p.separatorColor == ColorDefault {
+		return ""
+	}
+
+	if p.separatorAlpha < 1 {
+		return "\033[2m" + p.separatorColor.getColorCode()
+	}
+	return p.separatorColor.getColorCode()
+}
+
+// getColorCode returns the ANSI color code for the given color
+func (c Color) getColorCode() string {
+	switch c {
+	case ColorBlack:
+		return "\033[30m"
+	case ColorRed:
+		return "\033[31m"
+	case ColorGreen:
+		return "\033[32m"
+	case ColorYellow:
+		return "\033[33m"
+	case ColorBlue:
+		return "\033[34m"
+	case ColorMagenta:
+		return "\033[35m"
+	case ColorCyan:
+		return "\033[36m"
+	case ColorWhite:
+		return "\033[37m"
+	default:
+		return ""
+	}
 }

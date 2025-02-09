@@ -24,7 +24,8 @@ go get github.com/yarlson/pin
 
 ```go
 p := pin.New("Loading...")
-p.Start()
+cancel := p.Start(context.Background())
+defer cancel()
 // do some work
 p.Stop("Done!")
 ```
@@ -35,7 +36,8 @@ p.Stop("Done!")
 
 ```go
 p := pin.New("Processing data")
-p.Start()
+cancel := p.Start(context.Background())
+defer cancel()
 // ... do work ...
 p.UpdateMessage("Almost there...")
 // ... finish work ...
@@ -61,7 +63,8 @@ p.Stop("Upload complete")
 ```go
 p := pin.New("Downloading")
 p.SetPosition(pin.PositionRight)
-p.Start()
+cancel := p.Start(context.Background())
+defer cancel()
 // ... do work ...
 p.Stop("Downloaded")
 ```
@@ -76,7 +79,8 @@ p.SetSeparatorColor(pin.ColorWhite)
 p.SetSeparatorAlpha(0.7)
 p.SetDoneSymbol('✔')
 p.SetDoneSymbolColor(pin.ColorGreen)
-p.Start()
+cancel := p.Start(context.Background())
+defer cancel()
 // ... do work ...
 p.Stop("Success")
 ```
@@ -91,7 +95,7 @@ p := pin.New("message")
 
 ### Methods
 
-- `Start()` - Starts the spinner animation
+- `Start(ctx context.Context) context.CancelFunc` - Starts the spinner animation using the provided context.
 - `Stop(message ...string)` - Stops the spinner with optional final message
 - `UpdateMessage(message string)` - Updates the current message
 

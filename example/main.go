@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"time"
 
 	"github.com/yarlson/pin"
@@ -18,7 +19,8 @@ func main() {
 	s.SetPrefix("ftl")
 	s.SetPrefixColor(pin.ColorMagenta)
 
-	s.Start()
+	cancel := s.Start(context.Background())
+	defer cancel()
 
 	time.Sleep(2 * time.Second)
 
