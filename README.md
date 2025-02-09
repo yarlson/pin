@@ -4,8 +4,6 @@
 
 `pin` is a lightweight, customizable terminal spinner library for Go applications. It provides an elegant way to show progress and status in CLI applications with support for colors, custom symbols, and flexible positioning.
 
-![Demo](demo.gif)
-
 ## Features
 
 - 🎨 Customizable colors for all elements
