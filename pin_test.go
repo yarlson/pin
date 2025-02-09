@@ -5,15 +5,23 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/yarlson/pin"
 )
 
+var (
+	stdoutMu sync.Mutex
+)
+
 // captureOutput helps test terminal output by capturing stdout during test execution.
 // This is useful for verifying what the user would actually see in their terminal.
 func captureOutput(fn func()) string {
+	stdoutMu.Lock()
+	defer stdoutMu.Unlock()
+
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w

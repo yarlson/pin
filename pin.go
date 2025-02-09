@@ -32,6 +32,7 @@ package pin
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -99,6 +100,7 @@ type Pin struct {
 	frames          []rune
 	current         int
 	message         string
+	messageMu       sync.RWMutex // Add mutex for message field
 	stopChan        chan struct{}
 	isRunning       bool
 	spinnerColor    Color
@@ -259,6 +261,10 @@ func (p *Pin) Start() {
 						separatorColorCode, p.separator, reset)
 				}
 
+				p.messageMu.RLock()
+				message := p.message
+				p.messageMu.RUnlock()
+
 				var format string
 				var args []interface{}
 
@@ -267,13 +273,13 @@ func (p *Pin) Start() {
 					args = []interface{}{
 						prefixPart,
 						spinnerColorCode, p.frames[p.current], reset,
-						textColorCode, p.message, reset,
+						textColorCode, message, reset,
 					}
 				} else {
 					format = "\r%s%s%s%s %s%c%s "
 					args = []interface{}{
 						prefixPart,
-						textColorCode, p.message, reset,
+						textColorCode, message, reset,
 						spinnerColorCode, p.frames[p.current], reset,
 					}
 				}
@@ -336,5 +342,7 @@ func (p *Pin) Stop(message ...string) {
 
 // UpdateMessage changes the message shown next to the spinner.
 func (p *Pin) UpdateMessage(message string) {
+	p.messageMu.Lock()
 	p.message = message
+	p.messageMu.Unlock()
 }
