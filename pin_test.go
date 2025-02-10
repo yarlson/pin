@@ -13,6 +13,10 @@ import (
 	"github.com/yarlson/pin"
 )
 
+func init() {
+	pin.ForceInteractive = true
+}
+
 var (
 	stdoutMu sync.Mutex
 )

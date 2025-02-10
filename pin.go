@@ -39,6 +39,7 @@ package pin
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 )
@@ -194,7 +195,7 @@ func New(message string, opts ...Option) *Pin {
 	p := &Pin{
 		frames:          defaultFrames,
 		message:         message,
-		stopChan:        make(chan struct{}),
+		stopChan:        make(chan struct{}, 1),
 		spinnerColor:    ColorDefault,
 		textColor:       ColorDefault,
 		doneSymbol:      '✓',
@@ -219,6 +220,16 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 	if p.isRunning {
 		return func() {}
 	}
+
+	if !isTerminal(os.Stdout) {
+		p.isRunning = true
+		go func() {
+			<-ctx.Done()
+			p.isRunning = false
+		}()
+		return func() {}
+	}
+
 	p.isRunning = true
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -282,6 +293,13 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 // Stop halts the spinner animation and optionally displays a final message.
 func (p *Pin) Stop(message ...string) {
 	if !p.isRunning {
+		return
+	}
+
+	if !isTerminal(os.Stdout) {
+		if len(message) > 0 {
+			fmt.Println(message[0])
+		}
 		return
 	}
 	p.isRunning = false
@@ -366,3 +384,18 @@ func (c Color) getColorCode() string {
 		return ""
 	}
 }
+
+// isTerminal checks if the provided file descriptor is a terminal.
+func isTerminal(f *os.File) bool {
+	if ForceInteractive {
+		return true
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
+var ForceInteractive bool

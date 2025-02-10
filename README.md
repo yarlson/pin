@@ -15,6 +15,7 @@
 - ✨ Ability to update the spinner message dynamically
 - ⚙️ No external dependencies – uses only the Go standard library
 - 🚀 Compatible with Go 1.11 and later
+- ⏹ Automatically disables animations in non-interactive (piped) environments to prevent output corruption
 
 ## Installation
 
@@ -34,6 +35,10 @@ defer cancel()
 // do some work
 p.Stop("Done!")
 ```
+
+## Non-interactive Behavior
+
+When the spinner detects that `stdout` is not connected to an interactive terminal (for example, when output is piped), it disables animations and prints only the final message. This prevents ANSI escape codes from cluttering the output.
 
 ## Examples
 
