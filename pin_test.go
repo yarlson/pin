@@ -198,6 +198,7 @@ func TestAllColors(t *testing.T) {
 		pin.ColorBlue,
 		pin.ColorMagenta,
 		pin.ColorCyan,
+		pin.ColorGray,
 		pin.ColorWhite,
 	}
 
