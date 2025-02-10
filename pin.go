@@ -223,6 +223,10 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 
 	if !isTerminal(os.Stdout) {
 		p.isRunning = true
+		p.messageMu.RLock()
+		msg := p.message
+		p.messageMu.RUnlock()
+		fmt.Println(msg)
 		go func() {
 			<-ctx.Done()
 			p.isRunning = false
@@ -349,6 +353,9 @@ func (p *Pin) UpdateMessage(message string) {
 	p.messageMu.Lock()
 	p.message = message
 	p.messageMu.Unlock()
+	if !isTerminal(os.Stdout) {
+		fmt.Println(message)
+	}
 }
 
 // getSeparatorColorCode returns the color code for the separator, applying an alpha effect.

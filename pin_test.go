@@ -311,3 +311,41 @@ func TestNonInteractiveStart(t *testing.T) {
 		t.Errorf("Expected no output from Start in non-interactive mode, got %q", output)
 	}
 }
+
+// TestNonInteractiveFullMessageLogging verifies that in non-interactive mode, the
+// initial message, updated message, and final done message are logged in sequence.
+func TestNonInteractiveFullMessageLogging(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = false
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	output := captureOutput(func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		p := pin.New("Initial")
+		_ = p.Start(ctx)
+		time.Sleep(50 * time.Millisecond)
+		p.UpdateMessage("Updated")
+		time.Sleep(50 * time.Millisecond)
+		p.Stop("Done")
+		cancel()
+	})
+
+	// Split the captured output into non-empty lines.
+	var lines []string
+	for _, l := range strings.Split(output, "\n") {
+		if strings.TrimSpace(l) != "" {
+			lines = append(lines, l)
+		}
+	}
+
+	expected := []string{"Initial", "Updated", "Done"}
+	if len(lines) != len(expected) {
+		t.Errorf("Expected %d lines of output, got %d: %v", len(expected), len(lines), lines)
+		return
+	}
+	for i, line := range lines {
+		if line != expected[i] {
+			t.Errorf("Line %d mismatch: expected %q, got %q", i+1, expected[i], line)
+		}
+	}
+}
