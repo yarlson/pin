@@ -8,16 +8,15 @@ import (
 )
 
 func main() {
-	s := pin.New("Loading...")
-
-	s.SetSpinnerColor(pin.ColorCyan)
-	s.SetTextColor(pin.ColorYellow)
-
-	s.SetDoneSymbol('✔')
-	s.SetDoneSymbolColor(pin.ColorGreen)
-
-	s.SetPrefix("ftl")
-	s.SetPrefixColor(pin.ColorMagenta)
+	s := pin.New("Loading...",
+		pin.WithSpinnerColor(pin.ColorCyan),
+		pin.WithTextColor(pin.ColorYellow),
+		pin.WithDoneSymbol('✔'),
+		pin.WithDoneSymbolColor(pin.ColorGreen),
+		pin.WithPrefix("ftl"),
+		pin.WithPrefixColor(pin.ColorMagenta),
+		pin.WithSeparatorColor(pin.ColorGray),
+	)
 
 	cancel := s.Start(context.Background())
 	defer cancel()

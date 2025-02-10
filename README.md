@@ -7,12 +7,12 @@
 
 ## Features
 
-- 🎨 Customizable colors for all elements
+- 🎨 Customizable colors for all spinner elements via functional options
 - 🔄 Smooth braille-pattern animation
-- 🎯 Flexible positioning (left/right of message)
+- 🎯 Flexible positioning (spinner before/after message)
 - 💫 Configurable prefix and separator
-- 🌓 Separator transparency support
 - 🔤 UTF-8 symbol support
+- ✨ Ability to update the spinner message dynamically
 
 ## Installation
 
@@ -23,7 +23,10 @@ go get github.com/yarlson/pin
 ## Quick Start
 
 ```go
-p := pin.New("Loading...")
+p := pin.New("Loading...",
+    pin.WithSpinnerColor(pin.ColorCyan),
+    pin.WithTextColor(pin.ColorYellow),
+)
 cancel := p.Start(context.Background())
 defer cancel()
 // do some work
@@ -40,19 +43,20 @@ cancel := p.Start(context.Background())
 defer cancel()
 // ... do work ...
 p.UpdateMessage("Almost there...")
-// ... finish work ...
+// finish work
 p.Stop("Completed!")
 ```
 
 ### Styled Output
 
 ```go
-p := pin.New("Uploading")
-p.SetPrefix("Transfer")
-p.SetSeparator("→")
-p.SetSpinnerColor(pin.ColorBlue)
-p.SetTextColor(pin.ColorCyan)
-p.SetPrefixColor(pin.ColorYellow)
+p := pin.New("Uploading",
+    pin.WithPrefix("Transfer"),
+    pin.WithSeparator("→"),
+    pin.WithSpinnerColor(pin.ColorBlue),
+    pin.WithTextColor(pin.ColorCyan),
+    pin.WithPrefixColor(pin.ColorYellow),
+)
 p.Start()
 // ... do work ...
 p.Stop("Upload complete")
@@ -61,27 +65,29 @@ p.Stop("Upload complete")
 ### Right-side Spinner
 
 ```go
-p := pin.New("Downloading")
-p.SetPosition(pin.PositionRight)
+p := pin.New("Downloading", pin.WithPosition(pin.PositionRight))
 cancel := p.Start(context.Background())
 defer cancel()
 // ... do work ...
 p.Stop("Downloaded")
 ```
 
-### Custom Styling with Alpha
+### Custom Styling & Message Updating
 
 ```go
-p := pin.New("Processing")
-p.SetPrefix("Task")
-p.SetSeparator(":")
-p.SetSeparatorColor(pin.ColorWhite)
-p.SetSeparatorAlpha(0.7)
-p.SetDoneSymbol('✔')
-p.SetDoneSymbolColor(pin.ColorGreen)
+p := pin.New("Processing",
+    pin.WithPrefix("Task"),
+    pin.WithSeparator(":"),
+    pin.WithSeparatorColor(pin.ColorWhite),
+    pin.WithDoneSymbol('✔'),
+    pin.WithDoneSymbolColor(pin.ColorGreen),
+)
 cancel := p.Start(context.Background())
 defer cancel()
+
 // ... do work ...
+p.UpdateMessage("Almost done...")
+// finish work
 p.Stop("Success")
 ```
 
@@ -90,28 +96,21 @@ p.Stop("Success")
 ### Creating a New Spinner
 
 ```go
-p := pin.New("message")
+p := pin.New("message", /* options... */)
 ```
 
-### Methods
+### Available Options
 
-- `Start(ctx context.Context) context.CancelFunc` - Starts the spinner animation using the provided context.
-- `Stop(message ...string)` - Stops the spinner with optional final message
-- `UpdateMessage(message string)` - Updates the current message
-
-### Customization
-
-- `SetSpinnerColor(color Color)`
-- `SetTextColor(color Color)`
-- `SetPrefix(prefix string)`
-- `SetPrefixColor(color Color)`
-- `SetSeparator(separator string)`
-- `SetSeparatorColor(color Color)`
-- `SetSeparatorAlpha(alpha float32)`
-- `SetDoneSymbol(symbol rune)`
-- `SetDoneSymbolColor(color Color)`
-- `SetPosition(pos Position)`
-
+- `WithSpinnerColor(color Color)` – sets the spinner's animation color.
+- `WithTextColor(color Color)` – sets the color of the message text.
+- `WithPrefix(prefix string)` – sets text to display before the spinner.
+- `WithPrefixColor(color Color)` – sets the color of the prefix text.
+- `WithSeparator(separator string)` – sets the separator text between prefix and message.
+- `WithSeparatorColor(color Color)` – sets the color of the separator.
+- `WithDoneSymbol(symbol rune)` – sets the symbol displayed upon completion.
+- `WithDoneSymbolColor(color Color)` – sets the color of the done symbol.
+- `WithPosition(pos Position)` – sets the spinner's position relative to the message.
+  
 ### Available Colors
 
 - `ColorDefault`
@@ -122,6 +121,7 @@ p := pin.New("message")
 - `ColorBlue`
 - `ColorMagenta`
 - `ColorCyan`
+- `ColorGray`
 - `ColorWhite`
 
 ## Development
@@ -135,14 +135,14 @@ go test -v ./...
 ### Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+2. Create your feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m 'Add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
 5. Open a Pull Request
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details
+MIT License – see [LICENSE](LICENSE) for details
 
 ## Acknowledgments
 

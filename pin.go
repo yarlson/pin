@@ -2,7 +2,10 @@
 //
 // Example usage:
 //
-//	p := pin.New("Loading...")
+//	p := pin.New("Loading...",
+//	    pin.WithSpinnerColor(ColorCyan),
+//	    pin.WithTextColor(ColorYellow),
+//	)
 //	cancel := p.Start(context.Background())
 //	defer cancel()
 //	// ... do some work ...
@@ -10,12 +13,13 @@
 //
 // Example with custom styling:
 //
-//	p := pin.New("Processing")
-//	p.SetPrefix("Task")
-//	p.SetSeparator("→")
-//	p.SetSpinnerColor(pin.ColorBlue)
-//	p.SetTextColor(pin.ColorCyan)
-//	p.SetPrefixColor(pin.ColorYellow)
+//	p := pin.New("Processing",
+//	    WithPrefix("Task"),
+//	    WithSeparator("→"),
+//	    WithSpinnerColor(ColorBlue),
+//	    WithTextColor(ColorCyan),
+//	    WithPrefixColor(ColorYellow),
+//	)
 //	cancel := p.Start(context.Background())
 //	defer cancel()
 //	// ... do some work ...
@@ -23,8 +27,7 @@
 //
 // Example with right-side positioning:
 //
-//	p := pin.New("Uploading")
-//	p.SetPosition(pin.PositionRight)
+//	p := pin.New("Uploading", WithPosition(PositionRight))
 //	cancel := p.Start(context.Background())
 //	defer cancel()
 //	// ... do some work ...
@@ -41,11 +44,9 @@ import (
 )
 
 // Color represents ANSI color codes for terminal output styling.
-//
 // Example usage:
 //
-//	p.SetTextColor(pin.ColorGreen)
-//	p.SetSpinnerColor(pin.ColorBlue)
+//	p := pin.New("Loading...", WithTextColor(ColorGreen))
 type Color int
 
 const (
@@ -57,6 +58,7 @@ const (
 	ColorBlue
 	ColorMagenta
 	ColorCyan
+	ColorGray
 	ColorWhite
 )
 
@@ -64,14 +66,79 @@ const (
 //
 // Example usage:
 //
-//	p.SetPosition(pin.PositionRight) // Places spinner after the message
-//	p.SetPosition(pin.PositionLeft)  // Places spinner before the message (default)
+//	p := pin.New("Loading", WithPosition(PositionRight)) // Spinner after the message
 type Position int
 
 const (
 	PositionLeft  Position = iota // Before the message (default)
 	PositionRight                 // After the message
 )
+
+// Option is a functional option for configuring a Pin.
+type Option func(*Pin)
+
+// WithSpinnerColor sets the color of the spinning animation.
+func WithSpinnerColor(color Color) Option {
+	return func(p *Pin) {
+		p.spinnerColor = color
+	}
+}
+
+// WithTextColor sets the color of the message text.
+func WithTextColor(color Color) Option {
+	return func(p *Pin) {
+		p.textColor = color
+	}
+}
+
+// WithDoneSymbol sets the symbol displayed when the spinner completes.
+func WithDoneSymbol(symbol rune) Option {
+	return func(p *Pin) {
+		p.doneSymbol = symbol
+	}
+}
+
+// WithDoneSymbolColor sets the color of the completion symbol.
+func WithDoneSymbolColor(color Color) Option {
+	return func(p *Pin) {
+		p.doneSymbolColor = color
+	}
+}
+
+// WithPrefix sets the text displayed before the spinner and message.
+func WithPrefix(prefix string) Option {
+	return func(p *Pin) {
+		p.prefix = prefix
+	}
+}
+
+// WithPrefixColor sets the color of the prefix text.
+func WithPrefixColor(color Color) Option {
+	return func(p *Pin) {
+		p.prefixColor = color
+	}
+}
+
+// WithSeparator sets the separator text between prefix and message.
+func WithSeparator(separator string) Option {
+	return func(p *Pin) {
+		p.separator = separator
+	}
+}
+
+// WithSeparatorColor sets the color of the separator.
+func WithSeparatorColor(color Color) Option {
+	return func(p *Pin) {
+		p.separatorColor = color
+	}
+}
+
+// WithPosition sets whether the spinner appears before or after the message.
+func WithPosition(pos Position) Option {
+	return func(p *Pin) {
+		p.position = pos
+	}
+}
 
 // Pin represents an animated terminal spinner with customizable appearance and behavior.
 // It supports custom colors, symbols, prefixes, and positioning.
@@ -89,7 +156,6 @@ const (
 //	p.SetPrefix("Status")
 //	p.SetSeparator(":")
 //	p.SetSeparatorColor(pin.ColorWhite)
-//	p.SetSeparatorAlpha(0.7)
 //	p.SetSpinnerColor(pin.ColorCyan)
 //	p.SetTextColor(pin.ColorYellow)
 //	p.Start()
@@ -115,7 +181,6 @@ type Pin struct {
 	prefixColor     Color
 	separator       string
 	separatorColor  Color
-	separatorAlpha  float32
 	position        Position
 }
 
@@ -123,10 +188,10 @@ var defaultFrames = []rune{
 	'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏',
 }
 
-// New creates a new Pin instance with the given message.
-// The pin starts with default styling and left-side positioning.
-func New(message string) *Pin {
-	return &Pin{
+// New creates a new Pin instance with the given message and optional configuration options.
+// It sets default styling and applies any provided options.
+func New(message string, opts ...Option) *Pin {
+	p := &Pin{
 		frames:          defaultFrames,
 		message:         message,
 		stopChan:        make(chan struct{}),
@@ -138,65 +203,12 @@ func New(message string) *Pin {
 		prefixColor:     ColorDefault,
 		separator:       "›",
 		separatorColor:  ColorWhite,
-		separatorAlpha:  0.5,
 		position:        PositionLeft,
 	}
-}
-
-// SetSpinnerColor sets the color of the spinning animation.
-func (p *Pin) SetSpinnerColor(color Color) {
-	p.spinnerColor = color
-}
-
-// SetTextColor sets the color of the message text.
-func (p *Pin) SetTextColor(color Color) {
-	p.textColor = color
-}
-
-// SetDoneSymbol sets the symbol displayed when the spinner completes.
-func (p *Pin) SetDoneSymbol(symbol rune) {
-	p.doneSymbol = symbol
-}
-
-// SetDoneSymbolColor sets the color of the completion symbol.
-func (p *Pin) SetDoneSymbolColor(color Color) {
-	p.doneSymbolColor = color
-}
-
-// SetPrefix sets the text displayed before the spinner and message.
-func (p *Pin) SetPrefix(prefix string) {
-	p.prefix = prefix
-}
-
-// SetPrefixColor sets the color of the prefix text.
-func (p *Pin) SetPrefixColor(color Color) {
-	p.prefixColor = color
-}
-
-// SetSeparator sets the separator text between prefix and message.
-func (p *Pin) SetSeparator(separator string) {
-	p.separator = separator
-}
-
-// SetSeparatorColor sets the color of the separator.
-func (p *Pin) SetSeparatorColor(color Color) {
-	p.separatorColor = color
-}
-
-// SetSeparatorAlpha sets the opacity of the separator between 0.0 and 1.0.
-func (p *Pin) SetSeparatorAlpha(alpha float32) {
-	if alpha < 0 {
-		alpha = 0
+	for _, opt := range opts {
+		opt(p)
 	}
-	if alpha > 1 {
-		alpha = 1
-	}
-	p.separatorAlpha = alpha
-}
-
-// SetPosition sets whether the spinner appears before or after the message.
-func (p *Pin) SetPosition(pos Position) {
-	p.position = pos
+	return p
 }
 
 // Start begins the spinner animation using the provided context.
@@ -321,14 +333,10 @@ func (p *Pin) UpdateMessage(message string) {
 	p.messageMu.Unlock()
 }
 
-// getSeparatorColorCode returns the color code with alpha applied
+// getSeparatorColorCode returns the color code for the separator, applying an alpha effect.
 func (p *Pin) getSeparatorColorCode() string {
 	if p.separatorColor == ColorDefault {
 		return ""
-	}
-
-	if p.separatorAlpha < 1 {
-		return "\033[2m" + p.separatorColor.getColorCode()
 	}
 	return p.separatorColor.getColorCode()
 }
@@ -350,6 +358,8 @@ func (c Color) getColorCode() string {
 		return "\033[35m"
 	case ColorCyan:
 		return "\033[36m"
+	case ColorGray:
+		return "\033[90m"
 	case ColorWhite:
 		return "\033[37m"
 	default:

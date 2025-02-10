@@ -46,9 +46,10 @@ func TestBasicUsage(t *testing.T) {
 	p := pin.New("Loading")
 
 	output := captureOutput(func() {
-		p.Start(context.Background())
+		cancel := p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Done")
+		cancel()
 	})
 
 	if !strings.Contains(output, "Loading") {
@@ -61,20 +62,22 @@ func TestBasicUsage(t *testing.T) {
 
 // TestCustomization verifies that all customization options work together.
 func TestCustomization(t *testing.T) {
-	p := pin.New("Processing")
-	p.SetPrefix("Task")
-	p.SetSeparator("→")
-	p.SetSpinnerColor(pin.ColorBlue)
-	p.SetTextColor(pin.ColorCyan)
-	p.SetPrefixColor(pin.ColorYellow)
-	p.SetDoneSymbol('✔')
-	p.SetDoneSymbolColor(pin.ColorGreen)
-	p.SetPosition(pin.PositionRight)
+	p := pin.New("Processing",
+		pin.WithPrefix("Task"),
+		pin.WithSeparator("→"),
+		pin.WithSpinnerColor(pin.ColorBlue),
+		pin.WithTextColor(pin.ColorCyan),
+		pin.WithPrefixColor(pin.ColorYellow),
+		pin.WithDoneSymbol('✔'),
+		pin.WithDoneSymbolColor(pin.ColorGreen),
+		pin.WithPosition(pin.PositionRight),
+	)
 
 	output := captureOutput(func() {
-		p.Start(context.Background())
+		cancel := p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Complete")
+		cancel()
 	})
 
 	if !strings.Contains(output, "Task") {
@@ -94,54 +97,23 @@ func TestCustomization(t *testing.T) {
 // TestMessageUpdate verifies that messages can be updated while the spinner is running.
 func TestMessageUpdate(t *testing.T) {
 	p := pin.New("Initial")
-
-	var outputs []string
-	captureAndStore := func(fn func()) {
-		outputs = append(outputs, captureOutput(fn))
-	}
-
-	captureAndStore(func() {
-		p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-	})
-
-	captureAndStore(func() {
+	output := captureOutput(func() {
+		cancel := p.Start(context.Background())
+		time.Sleep(250 * time.Millisecond) // spinner prints "Initial"
 		p.UpdateMessage("Updated")
-		time.Sleep(250 * time.Millisecond)
-	})
-
-	captureAndStore(func() {
+		time.Sleep(250 * time.Millisecond) // spinner prints "Updated"
 		p.Stop("Final")
+		cancel()
 	})
 
-	if !strings.Contains(strings.Join(outputs, ""), "Initial") {
+	if !strings.Contains(output, "Initial") {
 		t.Error("Output should contain initial message")
 	}
-	if !strings.Contains(strings.Join(outputs, ""), "Updated") {
+	if !strings.Contains(output, "Updated") {
 		t.Error("Output should contain updated message")
 	}
-	if !strings.Contains(strings.Join(outputs, ""), "Final") {
+	if !strings.Contains(output, "Final") {
 		t.Error("Output should contain final message")
-	}
-}
-
-// TestSeparatorAlpha verifies that separator with alpha value is displayed correctly.
-func TestSeparatorAlpha(t *testing.T) {
-	p := pin.New("Testing")
-	p.SetPrefix("Alpha")
-	p.SetSeparatorAlpha(0.5)
-
-	output := captureOutput(func() {
-		p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Stop("Done")
-	})
-
-	if !strings.Contains(output, "Alpha") {
-		t.Error("Output should contain the prefix")
-	}
-	if !strings.Contains(output, "Testing") {
-		t.Error("Output should contain the message")
 	}
 }
 
@@ -150,10 +122,12 @@ func TestMultipleStarts(t *testing.T) {
 	p := pin.New("Testing")
 
 	output := captureOutput(func() {
-		p.Start(context.Background())
-		p.Start(context.Background())
+		cancel1 := p.Start(context.Background())
+		cancel2 := p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Done")
+		cancel1()
+		cancel2()
 	})
 
 	if strings.Count(output, "Testing") > len(output)/2 {
@@ -179,9 +153,10 @@ func TestStopWithoutMessage(t *testing.T) {
 	p := pin.New("Testing")
 
 	output := captureOutput(func() {
-		p.Start(context.Background())
+		cancel := p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop()
+		cancel()
 	})
 
 	if strings.Contains(output, "\n") {
@@ -191,21 +166,20 @@ func TestStopWithoutMessage(t *testing.T) {
 
 // TestPositionSwitching verifies that spinner can be displayed on either side of the message.
 func TestPositionSwitching(t *testing.T) {
-	p := pin.New("Testing")
-
 	leftOutput := captureOutput(func() {
-		p.SetPosition(pin.PositionLeft)
-		p.Start(context.Background())
+		p := pin.New("Testing", pin.WithPosition(pin.PositionLeft))
+		cancel := p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Done")
+		cancel()
 	})
 
-	p = pin.New("Testing")
 	rightOutput := captureOutput(func() {
-		p.SetPosition(pin.PositionRight)
-		p.Start(context.Background())
+		p := pin.New("Testing", pin.WithPosition(pin.PositionRight))
+		cancel := p.Start(context.Background())
 		time.Sleep(250 * time.Millisecond)
 		p.Stop("Done")
+		cancel()
 	})
 
 	if leftOutput == rightOutput {
@@ -228,17 +202,19 @@ func TestAllColors(t *testing.T) {
 	}
 
 	for _, color := range colors {
-		p := pin.New("Testing")
-		p.SetSpinnerColor(color)
-		p.SetTextColor(color)
-		p.SetPrefixColor(color)
-		p.SetSeparatorColor(color)
-		p.SetDoneSymbolColor(color)
+		p := pin.New("Testing",
+			pin.WithSpinnerColor(color),
+			pin.WithTextColor(color),
+			pin.WithPrefixColor(color),
+			pin.WithSeparatorColor(color),
+			pin.WithDoneSymbolColor(color),
+		)
 
 		output := captureOutput(func() {
-			p.Start(context.Background())
+			cancel := p.Start(context.Background())
 			time.Sleep(250 * time.Millisecond)
 			p.Stop("Done")
+			cancel()
 		})
 
 		if !strings.Contains(output, "Testing") {
@@ -247,64 +223,14 @@ func TestAllColors(t *testing.T) {
 	}
 }
 
-// TestSeparatorAlphaValues verifies that separator transparency works correctly.
-func TestSeparatorAlphaValues(t *testing.T) {
-	testCases := []struct {
-		name  string
-		alpha float32
-	}{
-		{"Zero", 0.0},
-		{"Quarter", 0.25},
-		{"Half", 0.5},
-		{"Full", 1.0},
-		{"Negative", -0.5},
-		{"TooHigh", 1.5},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			p := pin.New("Testing")
-			p.SetPrefix("Test")
-			p.SetSeparatorColor(pin.ColorWhite)
-			p.SetSeparatorAlpha(tc.alpha)
-
-			output := captureOutput(func() {
-				p.Start(context.Background())
-				time.Sleep(250 * time.Millisecond)
-				p.Stop("Done")
-			})
-
-			if !strings.Contains(output, "Test") {
-				t.Error("Output should contain the prefix")
-			}
-			if !strings.Contains(output, "Testing") {
-				t.Error("Output should contain the message")
-			}
-
-			dimCode := "\033[2m"
-			if tc.alpha < 1 && tc.alpha >= 0 && !strings.Contains(output, dimCode) {
-				t.Error("Output should contain dim effect for alpha < 1")
-			}
-			if tc.alpha >= 1 && strings.Contains(output, dimCode) {
-				t.Error("Output should not contain dim effect for alpha >= 1")
-			}
-		})
-	}
-}
-
+// TestStartCancellation verifies that cancellation in Start properly stops the spinner.
 func TestStartCancellation(t *testing.T) {
-	// Create a new spinner with a test message.
 	p := pin.New("Testing spinner")
-
-	// Create a cancellable context.
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// Start the spinner with the cancellable context.
-	_ = p.Start(ctx)
-
-	// Cancel the context to trigger the ctx.Done() branch.
+	cancelFunc := p.Start(ctx)
+	// Cancel the context to trigger the cancellation branch.
 	cancel()
-
-	// Allow some time for the goroutine to process the cancellation.
 	time.Sleep(150 * time.Millisecond)
+	// Ensure the returned cancel function is also invoked.
+	cancelFunc()
 }
