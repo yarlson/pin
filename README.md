@@ -104,6 +104,21 @@ p.UpdateMessage("Almost done...")
 p.Stop("Success")
 ```
 
+### Failure Indicator
+
+You can express a failure state with the spinner using the new `Fail()` method. Customize the failure appearance with `WithFailSymbol` and `WithFailSymbolColor`:
+
+```go
+p := pin.New("Deploying",
+    pin.WithFailSymbol('✖'),
+    pin.WithFailSymbolColor(pin.ColorRed),
+)
+cancel := p.Start(context.Background())
+defer cancel()
+// ... perform tasks ...
+p.Fail("Deployment failed")
+```
+
 ## API Reference
 
 ### Creating a New Spinner
@@ -122,6 +137,8 @@ p := pin.New("message", /* options... */)
 - `WithSeparatorColor(color Color)` – sets the color of the separator.
 - `WithDoneSymbol(symbol rune)` – sets the symbol displayed upon completion.
 - `WithDoneSymbolColor(color Color)` – sets the color of the done symbol.
+- `WithFailSymbol(symbol rune)` – sets the symbol displayed upon failure.
+- `WithFailSymbolColor(color Color)` – sets the color of the failure symbol.
 - `WithPosition(pos Position)` – sets the spinner's position relative to the message.
 
 ### Available Colors

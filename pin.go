@@ -34,6 +34,17 @@
 //	p.UpdateMessage("Almost done...")
 //	// ... do more work ...
 //	p.Stop("Upload complete")
+//
+// Example with failure:
+//
+//	p := pin.New("Processing",
+//	    WithFailSymbol('✖'),
+//	    WithFailSymbolColor(ColorRed),
+//	)
+//	cancel := p.Start(context.Background())
+//	defer cancel()
+//	// ... do some work ...
+//	p.Fail("Error occurred")
 package pin
 
 import (
@@ -141,6 +152,20 @@ func WithPosition(pos Position) Option {
 	}
 }
 
+// WithFailSymbol sets the symbol displayed when the spinner fails.
+func WithFailSymbol(symbol rune) Option {
+	return func(p *Pin) {
+		p.failSymbol = symbol
+	}
+}
+
+// WithFailSymbolColor sets the color of the failure symbol.
+func WithFailSymbolColor(color Color) Option {
+	return func(p *Pin) {
+		p.failSymbolColor = color
+	}
+}
+
 // Pin represents an animated terminal spinner with customizable appearance and behavior.
 // It supports custom colors, symbols, prefixes, and positioning.
 //
@@ -167,6 +192,16 @@ func WithPosition(pos Position) Option {
 //	// Complete with success
 //	p.SetDoneSymbolColor(pin.ColorGreen)
 //	p.Stop("Completed!")
+//
+// You can also indicate failure using the Fail method:
+//
+//	p := pin.New("Deploying",
+//	    WithFailSymbol('✖'),
+//	    WithFailSymbolColor(ColorRed),
+//	)
+//	p.Start()
+//	// ... error occurred ...
+//	p.Fail("Deployment failed")
 type Pin struct {
 	frames          []rune
 	current         int
@@ -178,6 +213,8 @@ type Pin struct {
 	textColor       Color
 	doneSymbol      rune
 	doneSymbolColor Color
+	failSymbol      rune
+	failSymbolColor Color
 	prefix          string
 	prefixColor     Color
 	separator       string
@@ -200,6 +237,8 @@ func New(message string, opts ...Option) *Pin {
 		textColor:       ColorDefault,
 		doneSymbol:      '✓',
 		doneSymbolColor: ColorGreen,
+		failSymbol:      '✖',
+		failSymbolColor: ColorRed,
 		prefix:          "",
 		prefixColor:     ColorDefault,
 		separator:       "›",
@@ -325,26 +364,71 @@ func (p *Pin) Stop(message ...string) {
 				separatorColorCode, p.separator, reset)
 		}
 
-		var format string
-		var args []interface{}
-
 		if p.position == PositionLeft {
-			format = "%s%s%c%s %s%s%s\n"
-			args = []interface{}{
+			format := "%s%s%c%s %s%s%s\n"
+			fmt.Printf(format,
 				prefixPart,
 				symbolColorCode, p.doneSymbol, reset,
 				textColorCode, message[0], reset,
-			}
+			)
 		} else {
-			format = "%s%s%s%s %s%c%s \n"
-			args = []interface{}{
+			format := "%s%s%s%s %s%c%s \n"
+			fmt.Printf(format,
 				prefixPart,
 				textColorCode, message[0], reset,
 				symbolColorCode, p.doneSymbol, reset,
-			}
+			)
+		}
+	}
+}
+
+// Fail halts the spinner animation and displays a failure message.
+// This method is similar to Stop but uses a distinct symbol and color scheme to indicate an error state.
+func (p *Pin) Fail(message ...string) {
+	if !p.isRunning {
+		return
+	}
+
+	if !isTerminal(os.Stdout) {
+		if len(message) > 0 {
+			fmt.Println(message[0])
+		}
+		return
+	}
+	p.isRunning = false
+	p.stopChan <- struct{}{}
+
+	fmt.Print("\r\033[K")
+
+	if len(message) > 0 {
+		prefixColorCode := p.prefixColor.getColorCode()
+		symbolColorCode := p.failSymbolColor.getColorCode()
+		textColorCode := p.textColor.getColorCode()
+		separatorColorCode := p.getSeparatorColorCode()
+		reset := "\033[0m"
+
+		prefixPart := ""
+		if p.prefix != "" {
+			prefixPart = fmt.Sprintf("%s%s%s %s%s%s ",
+				prefixColorCode, p.prefix, reset,
+				separatorColorCode, p.separator, reset)
 		}
 
-		fmt.Printf(format, args...)
+		if p.position == PositionLeft {
+			format := "%s%s%c%s %s%s%s\n"
+			fmt.Printf(format,
+				prefixPart,
+				symbolColorCode, p.failSymbol, reset,
+				textColorCode, message[0], reset,
+			)
+		} else {
+			format := "%s%s%s%s %s%c%s \n"
+			fmt.Printf(format,
+				prefixPart,
+				textColorCode, message[0], reset,
+				symbolColorCode, p.failSymbol, reset,
+			)
+		}
 	}
 }
 

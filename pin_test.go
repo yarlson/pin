@@ -349,3 +349,131 @@ func TestNonInteractiveFullMessageLogging(t *testing.T) {
 		}
 	}
 }
+
+// TestFail verifies that the Fail method properly displays a failure message.
+func TestFail(t *testing.T) {
+	p := pin.New("Working",
+		pin.WithFailSymbol('✖'),
+		pin.WithFailSymbolColor(pin.ColorRed),
+		pin.WithPosition(pin.PositionLeft),
+	)
+
+	output := captureOutput(func() {
+		cancel := p.Start(context.Background())
+		time.Sleep(250 * time.Millisecond)
+		p.Fail("Failed")
+		cancel()
+	})
+
+	if !strings.Contains(output, "Failed") {
+		t.Error("Output should contain the failure message")
+	}
+	if !strings.Contains(output, "✖") {
+		t.Error("Output should contain the failure symbol")
+	}
+}
+
+// TestFailRightPosition verifies failure output with spinner positioned to the right of the text.
+func TestFailRightPosition(t *testing.T) {
+	p := pin.New("Working",
+		pin.WithFailSymbol('✖'),
+		pin.WithFailSymbolColor(pin.ColorRed),
+		pin.WithPosition(pin.PositionRight),
+	)
+
+	output := captureOutput(func() {
+		cancel := p.Start(context.Background())
+		time.Sleep(250 * time.Millisecond)
+		p.Fail("Failed")
+		cancel()
+	})
+
+	if !strings.Contains(output, "Failed") {
+		t.Error("Output should contain the failure message")
+	}
+}
+
+// TestNonInteractiveFail ensures that in non-interactive mode, calling Fail with a message prints the message.
+func TestNonInteractiveFail(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = false
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	p := pin.New("NonInteractiveTest")
+	_ = p.Start(ctx)
+	time.Sleep(100 * time.Millisecond)
+
+	output := captureOutput(func() {
+		p.Fail("Failed non-interactive")
+	})
+	cancel()
+
+	expected := "Failed non-interactive\n"
+	if output != expected {
+		t.Errorf("Expected output %q, got %q", expected, output)
+	}
+}
+
+// TestNonInteractiveFailWithoutMessage verifies that calling Fail without a final message produces no output in non-interactive mode.
+func TestNonInteractiveFailWithoutMessage(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = false
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	p := pin.New("NonInteractiveTest")
+	_ = p.Start(ctx)
+	time.Sleep(100 * time.Millisecond)
+
+	output := captureOutput(func() {
+		p.Fail()
+	})
+	cancel()
+
+	if output != "" {
+		t.Errorf("Expected no output when no message provided, got %q", output)
+	}
+}
+
+// TestFailNotRunning verifies that calling Fail when the spinner is not running produces no output.
+func TestFailNotRunning(t *testing.T) {
+	p := pin.New("Not Running")
+
+	output := captureOutput(func() {
+		// Call Fail on a spinner that was never started.
+		p.Fail("Should not output")
+	})
+
+	if output != "" {
+		t.Errorf("Expected no output when Fail is called on a non-running spinner, got %q", output)
+	}
+}
+
+// TestFailHasPrefix verifies that when a prefix is provided, the Fail method prints the prefix along with the failure message.
+func TestFailHasPrefix(t *testing.T) {
+	p := pin.New("Working",
+		pin.WithFailSymbol('✖'),
+		pin.WithFailSymbolColor(pin.ColorRed),
+		pin.WithPrefix("TestPrefix"),
+		pin.WithPrefixColor(pin.ColorBlue),
+		pin.WithSeparator(":"),
+		pin.WithSeparatorColor(pin.ColorWhite),
+		pin.WithPosition(pin.PositionLeft),
+	)
+
+	output := captureOutput(func() {
+		cancel := p.Start(context.Background())
+		time.Sleep(250 * time.Millisecond)
+		p.Fail("Error occurred")
+		cancel()
+	})
+
+	if !strings.Contains(output, "TestPrefix") {
+		t.Error("Expected output to contain prefix 'TestPrefix'")
+	}
+
+	if !strings.Contains(output, "Error occurred") {
+		t.Error("Expected output to contain failure message 'Error occurred'")
+	}
+}
