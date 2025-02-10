@@ -13,6 +13,8 @@
 - 💫 Configurable prefix and separator
 - 🔤 UTF-8 symbol support
 - ✨ Ability to update the spinner message dynamically
+- ⚙️ No external dependencies – uses only the Go standard library
+- 🚀 Compatible with Go 1.11 and later
 
 ## Installation
 
@@ -124,7 +126,9 @@ p := pin.New("message", /* options... */)
 - `ColorGray`
 - `ColorWhite`
 
-## Development
+## Development & Compatibility
+
+This library is written using only the Go standard library and supports Go version 1.11 and later.
 
 ### Running Tests
 
