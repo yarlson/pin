@@ -239,3 +239,75 @@ func TestStartCancellation(t *testing.T) {
 	// Ensure the returned cancel function is also invoked.
 	cancelFunc()
 }
+
+// ---- New tests for non-interactive mode coverage ----
+
+// TestNonInteractiveStop ensures that in non-interactive mode calling Stop with a message
+// prints the message (using fmt.Println).
+func TestNonInteractiveStop(t *testing.T) {
+	// Temporarily force non-interactive mode.
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = false
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	p := pin.New("NonInteractiveTest")
+	_ = p.Start(ctx)
+	// Allow some time for p.Start's goroutine to spin (even though it prints nothing).
+	time.Sleep(100 * time.Millisecond)
+
+	output := captureOutput(func() {
+		p.Stop("Completed in non-interactive")
+	})
+	cancel()
+
+	expected := "Completed in non-interactive\n"
+	if output != expected {
+		t.Errorf("Expected output %q, got %q", expected, output)
+	}
+}
+
+// TestNonInteractiveStopWithoutMessage verifies that calling Stop without a final message
+// does not print any output when the terminal is non-interactive.
+func TestNonInteractiveStopWithoutMessage(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = false
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	p := pin.New("NonInteractiveTest")
+	_ = p.Start(ctx)
+	time.Sleep(100 * time.Millisecond)
+
+	output := captureOutput(func() {
+		p.Stop()
+	})
+	cancel()
+
+	if output != "" {
+		t.Errorf("Expected no output when no message provided, got %q", output)
+	}
+}
+
+// TestNonInteractiveStart verifies that Start in non-interactive mode does not
+// print any spinner output.
+func TestNonInteractiveStart(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = false
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	p := pin.New("NonInteractiveTest")
+	cancelFn := p.Start(ctx)
+	// Allow some time for Start's goroutine (which prints nothing in non-interactive mode).
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	cancelFn()
+
+	output := captureOutput(func() {
+		// No additional printing should occur.
+	})
+	if output != "" {
+		t.Errorf("Expected no output from Start in non-interactive mode, got %q", output)
+	}
+}

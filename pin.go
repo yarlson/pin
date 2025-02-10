@@ -390,10 +390,7 @@ func isTerminal(f *os.File) bool {
 	if ForceInteractive {
 		return true
 	}
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
+	fi, _ := f.Stat()
 
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
