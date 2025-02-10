@@ -13,7 +13,7 @@ func main() {
 		pin.WithTextColor(pin.ColorYellow),
 		pin.WithDoneSymbol('✔'),
 		pin.WithDoneSymbolColor(pin.ColorGreen),
-		pin.WithPrefix("ftl"),
+		pin.WithPrefix("pin"),
 		pin.WithPrefixColor(pin.ColorMagenta),
 		pin.WithSeparatorColor(pin.ColorGray),
 	)
@@ -21,10 +21,10 @@ func main() {
 	cancel := s.Start(context.Background())
 	defer cancel()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(4 * time.Second)
 
 	s.UpdateMessage("Still working...")
-	time.Sleep(2 * time.Second)
+	time.Sleep(4 * time.Second)
 
 	s.Stop("Done!")
 }
