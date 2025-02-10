@@ -38,7 +38,11 @@ p.Stop("Done!")
 
 ## Non-interactive Behavior
 
-When the spinner detects that `stdout` is not connected to an interactive terminal (for example, when output is piped), it disables animations and prints only the final message. This prevents ANSI escape codes from cluttering the output.
+When the spinner detects that `stdout` is not connected to an interactive terminal (for example, when output is piped), it disables animations and outputs messages as plain text. In this mode:
+
+- The **initial message** is printed immediately when the spinner starts.
+- Any **updated messages** are printed as soon as you call `UpdateMessage()`.
+- The **final done message** is printed when you call `Stop()`.
 
 ## Examples
 
@@ -117,7 +121,7 @@ p := pin.New("message", /* options... */)
 - `WithDoneSymbol(symbol rune)` – sets the symbol displayed upon completion.
 - `WithDoneSymbolColor(color Color)` – sets the color of the done symbol.
 - `WithPosition(pos Position)` – sets the spinner's position relative to the message.
-  
+
 ### Available Colors
 
 - `ColorDefault`
