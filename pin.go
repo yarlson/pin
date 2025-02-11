@@ -290,16 +290,8 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 			case <-ticker.C:
 				spinnerColorCode := p.spinnerColor.getColorCode()
 				textColorCode := p.textColor.getColorCode()
-				prefixColorCode := p.prefixColor.getColorCode()
-				separatorColorCode := p.getSeparatorColorCode()
 				reset := "\033[0m"
-
-				prefixPart := ""
-				if p.prefix != "" {
-					prefixPart = fmt.Sprintf("%s%s%s %s%s%s ",
-						prefixColorCode, p.prefix, reset,
-						separatorColorCode, p.separator, reset)
-				}
+				prefixPart := p.buildPrefixPart()
 
 				p.messageMu.RLock()
 				message := p.message
@@ -335,14 +327,11 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 
 // Stop halts the spinner animation and optionally displays a final message.
 func (p *Pin) Stop(message ...string) {
-	if !p.isRunning {
+	if p.handleNonTerminal(message...) {
 		return
 	}
 
-	if !isTerminal(os.Stdout) {
-		if len(message) > 0 {
-			fmt.Println(message[0])
-		}
+	if !p.isRunning {
 		return
 	}
 	p.isRunning = false
@@ -351,48 +340,18 @@ func (p *Pin) Stop(message ...string) {
 	fmt.Print("\r\033[K")
 
 	if len(message) > 0 {
-		prefixColorCode := p.prefixColor.getColorCode()
-		symbolColorCode := p.doneSymbolColor.getColorCode()
-		textColorCode := p.textColor.getColorCode()
-		separatorColorCode := p.getSeparatorColorCode()
-		reset := "\033[0m"
-
-		prefixPart := ""
-		if p.prefix != "" {
-			prefixPart = fmt.Sprintf("%s%s%s %s%s%s ",
-				prefixColorCode, p.prefix, reset,
-				separatorColorCode, p.separator, reset)
-		}
-
-		if p.position == PositionLeft {
-			format := "%s%s%c%s %s%s%s\n"
-			fmt.Printf(format,
-				prefixPart,
-				symbolColorCode, p.doneSymbol, reset,
-				textColorCode, message[0], reset,
-			)
-		} else {
-			format := "%s%s%s%s %s%c%s \n"
-			fmt.Printf(format,
-				prefixPart,
-				textColorCode, message[0], reset,
-				symbolColorCode, p.doneSymbol, reset,
-			)
-		}
+		p.printResult(message[0], p.doneSymbol, p.doneSymbolColor)
 	}
 }
 
 // Fail halts the spinner animation and displays a failure message.
 // This method is similar to Stop but uses a distinct symbol and color scheme to indicate an error state.
 func (p *Pin) Fail(message ...string) {
-	if !p.isRunning {
+	if p.handleNonTerminal(message...) {
 		return
 	}
 
-	if !isTerminal(os.Stdout) {
-		if len(message) > 0 {
-			fmt.Println(message[0])
-		}
+	if !p.isRunning {
 		return
 	}
 	p.isRunning = false
@@ -401,34 +360,7 @@ func (p *Pin) Fail(message ...string) {
 	fmt.Print("\r\033[K")
 
 	if len(message) > 0 {
-		prefixColorCode := p.prefixColor.getColorCode()
-		symbolColorCode := p.failSymbolColor.getColorCode()
-		textColorCode := p.textColor.getColorCode()
-		separatorColorCode := p.getSeparatorColorCode()
-		reset := "\033[0m"
-
-		prefixPart := ""
-		if p.prefix != "" {
-			prefixPart = fmt.Sprintf("%s%s%s %s%s%s ",
-				prefixColorCode, p.prefix, reset,
-				separatorColorCode, p.separator, reset)
-		}
-
-		if p.position == PositionLeft {
-			format := "%s%s%c%s %s%s%s\n"
-			fmt.Printf(format,
-				prefixPart,
-				symbolColorCode, p.failSymbol, reset,
-				textColorCode, message[0], reset,
-			)
-		} else {
-			format := "%s%s%s%s %s%c%s \n"
-			fmt.Printf(format,
-				prefixPart,
-				textColorCode, message[0], reset,
-				symbolColorCode, p.failSymbol, reset,
-			)
-		}
+		p.printResult(message[0], p.failSymbol, p.failSymbolColor)
 	}
 }
 
@@ -444,9 +376,6 @@ func (p *Pin) UpdateMessage(message string) {
 
 // getSeparatorColorCode returns the color code for the separator, applying an alpha effect.
 func (p *Pin) getSeparatorColorCode() string {
-	if p.separatorColor == ColorDefault {
-		return ""
-	}
 	return p.separatorColor.getColorCode()
 }
 
@@ -487,3 +416,40 @@ func isTerminal(f *os.File) bool {
 }
 
 var ForceInteractive bool
+
+// buildPrefixPart constructs the prefix string (including colors) if a prefix is set.
+func (p *Pin) buildPrefixPart() string {
+	if p.prefix == "" {
+		return ""
+	}
+	reset := "\033[0m"
+	return fmt.Sprintf("%s%s%s %s%s%s ", p.prefixColor.getColorCode(), p.prefix, reset, p.getSeparatorColorCode(), p.separator, reset)
+}
+
+// printResult prints the final message along with a symbol using the appropriate formatting.
+func (p *Pin) printResult(msg string, symbol rune, symbolColor Color) {
+	reset := "\033[0m"
+	textColorCode := p.textColor.getColorCode()
+	symColorCode := symbolColor.getColorCode()
+	prefixPart := p.buildPrefixPart()
+
+	if p.position == PositionLeft {
+		format := "%s%s%c%s %s%s%s\n"
+		fmt.Printf(format, prefixPart, symColorCode, symbol, reset, textColorCode, msg, reset)
+	} else {
+		format := "%s%s%s%s %s%c%s\n"
+		fmt.Printf(format, prefixPart, textColorCode, msg, reset, symColorCode, symbol, reset)
+	}
+}
+
+// handleNonTerminal checks if stdout is non-terminal.
+// If yes, it prints a plain message (if provided) and returns true.
+func (p *Pin) handleNonTerminal(message ...string) bool {
+	if !isTerminal(os.Stdout) {
+		if len(message) > 0 {
+			fmt.Println(message[0])
+		}
+		return true
+	}
+	return false
+}

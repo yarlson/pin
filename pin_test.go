@@ -240,8 +240,6 @@ func TestStartCancellation(t *testing.T) {
 	cancelFunc()
 }
 
-// ---- New tests for non-interactive mode coverage ----
-
 // TestNonInteractiveStop ensures that in non-interactive mode calling Stop with a message
 // prints the message (using fmt.Println).
 func TestNonInteractiveStop(t *testing.T) {
@@ -441,7 +439,6 @@ func TestFailNotRunning(t *testing.T) {
 	p := pin.New("Not Running")
 
 	output := captureOutput(func() {
-		// Call Fail on a spinner that was never started.
 		p.Fail("Should not output")
 	})
 
