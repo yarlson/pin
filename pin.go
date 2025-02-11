@@ -50,6 +50,7 @@ package pin
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -166,6 +167,13 @@ func WithFailSymbolColor(color Color) Option {
 	}
 }
 
+// WithWriter sets a custom io.Writer for spinner output.
+func WithWriter(w io.Writer) Option {
+	return func(p *Pin) {
+		p.out = w
+	}
+}
+
 // Pin represents an animated terminal spinner with customizable appearance and behavior.
 // It supports custom colors, symbols, prefixes, and positioning.
 //
@@ -220,6 +228,7 @@ type Pin struct {
 	separator       string
 	separatorColor  Color
 	position        Position
+	out             io.Writer
 }
 
 var defaultFrames = []rune{
@@ -244,6 +253,7 @@ func New(message string, opts ...Option) *Pin {
 		separator:       "›",
 		separatorColor:  ColorWhite,
 		position:        PositionLeft,
+		out:             os.Stdout,
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -260,7 +270,7 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 		return func() {}
 	}
 
-	if !isTerminal(os.Stdout) {
+	if !isTerminal(p.out) {
 		p.isRunning = true
 		p.messageMu.RLock()
 		msg := p.message
@@ -369,7 +379,7 @@ func (p *Pin) UpdateMessage(message string) {
 	p.messageMu.Lock()
 	p.message = message
 	p.messageMu.Unlock()
-	if !isTerminal(os.Stdout) {
+	if !isTerminal(p.out) {
 		fmt.Println(message)
 	}
 }
@@ -405,12 +415,22 @@ func (c Color) getColorCode() string {
 	}
 }
 
-// isTerminal checks if the provided file descriptor is a terminal.
-func isTerminal(f *os.File) bool {
+// isTerminal checks if the provided writer is a terminal.
+func isTerminal(w io.Writer) bool {
 	if ForceInteractive {
 		return true
 	}
-	fi, _ := f.Stat()
+
+	// Ensure the writer is an *os.File
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
 
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
@@ -445,7 +465,7 @@ func (p *Pin) printResult(msg string, symbol rune, symbolColor Color) {
 // handleNonTerminal checks if stdout is non-terminal.
 // If yes, it prints a plain message (if provided) and returns true.
 func (p *Pin) handleNonTerminal(message ...string) bool {
-	if !isTerminal(os.Stdout) {
+	if !isTerminal(p.out) {
 		if len(message) > 0 {
 			fmt.Println(message[0])
 		}

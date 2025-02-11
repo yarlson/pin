@@ -474,3 +474,57 @@ func TestFailHasPrefix(t *testing.T) {
 		t.Error("Expected output to contain failure message 'Error occurred'")
 	}
 }
+
+// TestIsTerminalNonFile tests the branch where the writer is not an *os.File.
+func TestIsTerminalNonFile(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = false
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	dummy := &bytes.Buffer{}
+	p := pin.New("Test Message", pin.WithWriter(dummy))
+
+	output := captureOutput(func() {
+		p.UpdateMessage("NonFileWriterTest")
+	})
+	if !strings.Contains(output, "NonFileWriterTest") {
+		t.Error("Expected update message to be printed due to non-*os.File writer")
+	}
+}
+
+// TestIsTerminalStatError tests the branch where writer.Stat() returns an error.
+func TestIsTerminalStatError(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = false
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	r, _, _ := os.Pipe()
+	r.Close()
+
+	p := pin.New("Test Message", pin.WithWriter(r))
+
+	output := captureOutput(func() {
+		p.UpdateMessage("StatErrorTest")
+	})
+	if !strings.Contains(output, "StatErrorTest") {
+		t.Error("Expected update message to be printed due to Stat error branch")
+	}
+}
+
+// TestForceInteractiveSuppressUpdate tests that when ForceInteractive is true,
+// UpdateMessage does not print anything.
+func TestForceInteractiveSuppressUpdate(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	dummy := &bytes.Buffer{}
+	p := pin.New("Test Message", pin.WithWriter(dummy))
+
+	output := captureOutput(func() {
+		p.UpdateMessage("ForceInteractiveTest")
+	})
+	if output != "" {
+		t.Error("Expected no output when ForceInteractive is true")
+	}
+}
