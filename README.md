@@ -38,6 +38,22 @@ defer cancel()
 p.Stop("Done!")
 ```
 
+## Custom Output Writer
+
+You can direct spinner output to an alternative writer (for example, `os.Stderr`) using the `WithWriter` option:
+
+```go
+p := pin.New("Processing...",
+    pin.WithSpinnerColor(pin.ColorCyan),
+    pin.WithTextColor(pin.ColorYellow),
+    pin.WithWriter(os.Stderr), // output will be written to stderr
+)
+cancel := p.Start(context.Background())
+defer cancel()
+// perform your work
+p.Stop("Done!")
+```
+
 ## Non-interactive Behavior
 
 When the spinner detects that `stdout` is not connected to an interactive terminal (for example, when output is piped), it disables animations and outputs messages as plain text. In this mode:

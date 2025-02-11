@@ -45,6 +45,17 @@
 //	defer cancel()
 //	// ... do some work ...
 //	p.Fail("Error occurred")
+//
+// Example with custom output writer:
+//
+//	p := pin.New("Saving Data",
+//	    WithSpinnerColor(ColorMagenta),
+//	    WithWriter(os.Stderr), // send output to stderr
+//	)
+//	cancel := p.Start(context.Background())
+//	defer cancel()
+//	// ... do some work ...
+//	p.Stop("Saved!")
 package pin
 
 import (
