@@ -156,6 +156,7 @@ p := pin.New("message", /* options... */)
 - `WithFailSymbol(symbol rune)` – sets the symbol displayed upon failure.
 - `WithFailSymbolColor(color Color)` – sets the color of the failure symbol.
 - `WithPosition(pos Position)` – sets the spinner's position relative to the message.
+- `WithWriter(w io.Writer)` – sets a custom writer for spinner output.
 
 ### Available Colors
 
