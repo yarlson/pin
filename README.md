@@ -122,7 +122,7 @@ p.Stop("Success")
 
 ### Failure Indicator
 
-You can express a failure state with the spinner using the new `Fail()` method. Customize the failure appearance with `WithFailSymbol` and `WithFailSymbolColor`:
+You can express a failure state with the spinner using the new `Fail()` method. Customize the failure appearance with `WithFailSymbol`, `WithFailSymbolColor`, and (optionally) `WithFailColor`.
 
 ```go
 p := pin.New("Deploying",
@@ -155,6 +155,7 @@ p := pin.New("message", /* options... */)
 - `WithDoneSymbolColor(color Color)` – sets the color of the done symbol.
 - `WithFailSymbol(symbol rune)` – sets the symbol displayed upon failure.
 - `WithFailSymbolColor(color Color)` – sets the color of the failure symbol.
+- `WithFailColor(color Color)` – sets the color of the failure message text.
 - `WithPosition(pos Position)` – sets the spinner's position relative to the message.
 - `WithWriter(w io.Writer)` – sets a custom writer for spinner output.
 

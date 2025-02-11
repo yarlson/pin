@@ -178,6 +178,14 @@ func WithFailSymbolColor(color Color) Option {
 	}
 }
 
+// WithFailColor sets the color of the failure message text.
+// If not set, the failure message is printed using the spinner's text color.
+func WithFailColor(color Color) Option {
+	return func(p *Pin) {
+		p.failColor = color
+	}
+}
+
 // WithWriter sets a custom io.Writer for spinner output.
 func WithWriter(w io.Writer) Option {
 	return func(p *Pin) {
@@ -234,6 +242,7 @@ type Pin struct {
 	doneSymbolColor Color
 	failSymbol      rune
 	failSymbolColor Color
+	failColor       Color
 	prefix          string
 	prefixColor     Color
 	separator       string
@@ -259,6 +268,7 @@ func New(message string, opts ...Option) *Pin {
 		doneSymbolColor: ColorGreen,
 		failSymbol:      '✖',
 		failSymbolColor: ColorRed,
+		failColor:       ColorDefault,
 		prefix:          "",
 		prefixColor:     ColorDefault,
 		separator:       "›",
@@ -460,16 +470,21 @@ func (p *Pin) buildPrefixPart() string {
 // printResult prints the final message along with a symbol using the appropriate formatting.
 func (p *Pin) printResult(msg string, symbol rune, symbolColor Color) {
 	reset := "\033[0m"
-	textColorCode := p.textColor.getColorCode()
+	var msgColorCode string
+	if symbol == p.failSymbol && p.failColor != ColorDefault {
+		msgColorCode = p.failColor.getColorCode()
+	} else {
+		msgColorCode = p.textColor.getColorCode()
+	}
 	symColorCode := symbolColor.getColorCode()
 	prefixPart := p.buildPrefixPart()
 
 	if p.position == PositionLeft {
 		format := "%s%s%c%s %s%s%s\n"
-		fmt.Printf(format, prefixPart, symColorCode, symbol, reset, textColorCode, msg, reset)
+		fmt.Printf(format, prefixPart, symColorCode, symbol, reset, msgColorCode, msg, reset)
 	} else {
 		format := "%s%s%s%s %s%c%s\n"
-		fmt.Printf(format, prefixPart, textColorCode, msg, reset, symColorCode, symbol, reset)
+		fmt.Printf(format, prefixPart, msgColorCode, msg, reset, symColorCode, symbol, reset)
 	}
 }
 

@@ -528,3 +528,57 @@ func TestForceInteractiveSuppressUpdate(t *testing.T) {
 		t.Error("Expected no output when ForceInteractive is true")
 	}
 }
+
+// TestFailWithCustomFailColor verifies that setting a custom fail color overrides the default text color for the failure message.
+func TestFailWithCustomFailColor(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	p := pin.New("Working",
+		pin.WithFailSymbol('✖'),
+		pin.WithFailSymbolColor(pin.ColorRed),
+		pin.WithFailColor(pin.ColorMagenta),
+		pin.WithTextColor(pin.ColorYellow),
+		pin.WithPosition(pin.PositionLeft),
+	)
+
+	output := captureOutput(func() {
+		cancel := p.Start(context.Background())
+		time.Sleep(250 * time.Millisecond)
+		p.Fail("Failed with custom color")
+		cancel()
+	})
+
+	expectedFailMsgColor := "\033[35m"
+	if !strings.Contains(output, expectedFailMsgColor) {
+		t.Errorf("Expected output to contain the fail color ANSI code %q, got: %q", expectedFailMsgColor, output)
+	}
+}
+
+// TestFailWithoutCustomFailColorUsesTextColor verifies that when no custom fail color is set,
+// the failure message uses the spinner's text color.
+func TestFailWithoutCustomFailColorUsesTextColor(t *testing.T) {
+	originalForceInteractive := pin.ForceInteractive
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = originalForceInteractive }()
+
+	p := pin.New("Working",
+		pin.WithFailSymbol('✖'),
+		pin.WithFailSymbolColor(pin.ColorRed),
+		pin.WithTextColor(pin.ColorBlue),
+		pin.WithPosition(pin.PositionLeft),
+	)
+
+	output := captureOutput(func() {
+		cancel := p.Start(context.Background())
+		time.Sleep(250 * time.Millisecond)
+		p.Fail("Failed using text color")
+		cancel()
+	})
+
+	expectedTextColorCode := "\033[34m"
+	if !strings.Contains(output, expectedTextColorCode) {
+		t.Errorf("Expected output to contain text color ANSI code %q, got: %q", expectedTextColorCode, output)
+	}
+}
