@@ -335,14 +335,14 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 				var args []interface{}
 
 				if p.position == PositionLeft {
-					format = "\r%s%s%c%s %s%s%s"
+					format = "\r\033[K%s%s%c%s %s%s%s"
 					args = []interface{}{
 						prefixPart,
 						spinnerColorCode, p.frames[p.current], reset,
 						textColorCode, message, reset,
 					}
 				} else {
-					format = "\r%s%s%s%s %s%c%s "
+					format = "\r\033[K%s%s%s%s %s%c%s "
 					args = []interface{}{
 						prefixPart,
 						textColorCode, message, reset,
