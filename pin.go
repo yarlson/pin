@@ -186,6 +186,12 @@ func WithFailColor(color Color) Option {
 	}
 }
 
+func WithSpinnerFrames(frames []rune) Option {
+	return func(p *Pin) {
+		p.frames = frames
+	}
+}
+
 // WithWriter sets a custom io.Writer for spinner output.
 func WithWriter(w io.Writer) Option {
 	return func(p *Pin) {
