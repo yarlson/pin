@@ -157,6 +157,7 @@ p := pin.New("message", /* options... */)
 - `WithFailSymbolColor(color Color)` – sets the color of the failure symbol.
 - `WithFailColor(color Color)` – sets the color of the failure message text.
 - `WithPosition(pos Position)` – sets the spinner's position relative to the message.
+- `WithSpinnerFrames(frames []rune)` – sets the spinner's frames.
 - `WithWriter(w io.Writer)` – sets a custom writer for spinner output.
 
 ### Available Colors

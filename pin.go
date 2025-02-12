@@ -186,6 +186,9 @@ func WithFailColor(color Color) Option {
 	}
 }
 
+// WithSpinnerFrames sets the frames for the spinner.
+// If not set, defaults to the braille symbols. The frames are used from
+// beginning to end and then start at the beginning (frames[0]) again
 func WithSpinnerFrames(frames []rune) Option {
 	return func(p *Pin) {
 		p.frames = frames
