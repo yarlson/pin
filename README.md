@@ -182,6 +182,10 @@ This library is written using only the Go standard library and supports Go versi
 go test -v ./...
 ```
 
+## Prompt
+
+The LLM prompt example in [example/prompt.md](example/prompt.md) shows you how to quickly integrate pin into your codebase.
+
 ### Contributing
 
 1. Fork the repository
