@@ -249,6 +249,7 @@ type Pin struct {
 	separatorColor  Color
 	position        Position
 	out             io.Writer
+	wg              sync.WaitGroup
 }
 
 var defaultFrames = []rune{
@@ -308,8 +309,10 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 
 	ctx, cancel := context.WithCancel(ctx)
 	ticker := time.NewTicker(100 * time.Millisecond)
+	p.wg.Add(1)
 	go func() {
 		defer ticker.Stop()
+		defer p.wg.Done()
 		for {
 			select {
 			case <-p.stopChan:
@@ -367,6 +370,7 @@ func (p *Pin) Stop(message ...string) {
 	}
 	p.isRunning = false
 	p.stopChan <- struct{}{}
+	p.wg.Wait()
 
 	fmt.Print("\r\033[K")
 
@@ -387,6 +391,7 @@ func (p *Pin) Fail(message ...string) {
 	}
 	p.isRunning = false
 	p.stopChan <- struct{}{}
+	p.wg.Wait()
 
 	fmt.Print("\r\033[K")
 
