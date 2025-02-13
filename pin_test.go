@@ -582,3 +582,23 @@ func TestFailWithoutCustomFailColorUsesTextColor(t *testing.T) {
 		t.Errorf("Expected output to contain text color ANSI code %q, got: %q", expectedTextColorCode, output)
 	}
 }
+
+// TestAllColors verifies that custom spinner configs work correctly
+// Note that since spinner frames only show up on proper terminals and thus
+// can't be captured, we can't really verify that they were emitted.
+func TestSpinnerFrames(t *testing.T) {
+	framesets := []string{
+		".oO0Oo",
+		"|/-\\",
+	}
+
+	for _, frames := range framesets {
+		p := pin.New("Testing",
+			pin.WithSpinnerFrames([]rune(frames)),
+		)
+		cancel := p.Start(context.Background())
+		time.Sleep(250 * time.Millisecond)
+		p.Stop("Done")
+		cancel()
+	}
+}
