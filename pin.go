@@ -75,7 +75,6 @@ type Color int
 
 const (
 	ColorDefault Color = iota
-	ColorReset
 	ColorBlack
 	ColorRed
 	ColorGreen
@@ -85,6 +84,7 @@ const (
 	ColorCyan
 	ColorGray
 	ColorWhite
+	ColorReset
 )
 
 // Position represents the position of the spinner relative to the message text.
@@ -332,9 +332,6 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 				fmt.Print("\r\033[K")
 				return
 			case <-ticker.C:
-				spinnerColorCode := p.spinnerColor.getColorCode()
-				textColorCode := p.textColor.getColorCode()
-				reset := ColorReset.getColorCode()
 				prefixPart := p.buildPrefixPart()
 
 				p.messageMu.RLock()
@@ -348,15 +345,15 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 					format = "\r\033[K%s%s%c%s %s%s%s"
 					args = []interface{}{
 						prefixPart,
-						spinnerColorCode, p.frames[p.current], reset,
-						textColorCode, message, reset,
+						p.spinnerColor, p.frames[p.current], ColorReset,
+						p.textColor, message, ColorReset,
 					}
 				} else {
 					format = "\r\033[K%s%s%s%s %s%c%s "
 					args = []interface{}{
 						prefixPart,
-						textColorCode, message, reset,
-						spinnerColorCode, p.frames[p.current], reset,
+						p.textColor, message, ColorReset,
+						p.textColor, p.frames[p.current], ColorReset,
 					}
 				}
 
@@ -420,13 +417,8 @@ func (p *Pin) UpdateMessage(message string) {
 	}
 }
 
-// getSeparatorColorCode returns the color code for the separator, applying an alpha effect.
-func (p *Pin) getSeparatorColorCode() string {
-	return p.separatorColor.getColorCode()
-}
-
-// getColorCode returns the ANSI color code for the given color
-func (c Color) getColorCode() string {
+// String returns the ANSI color code for the given color
+func (c Color) String() string {
 	switch c {
 	case ColorReset:
 		return "\033[0m"
@@ -480,28 +472,25 @@ func (p *Pin) buildPrefixPart() string {
 	if p.prefix == "" {
 		return ""
 	}
-	reset :=  ColorReset.getColorCode()
-	return fmt.Sprintf("%s%s%s %s%s%s ", p.prefixColor.getColorCode(), p.prefix, reset, p.getSeparatorColorCode(), p.separator, reset)
+	return fmt.Sprintf("%s%s%s %s%s%s ", p.prefixColor, p.prefix, ColorReset, p.separatorColor, p.separator, ColorReset)
 }
 
 // printResult prints the final message along with a symbol using the appropriate formatting.
 func (p *Pin) printResult(msg string, symbol rune, symbolColor Color) {
-	reset := ColorReset.getColorCode()
-	var msgColorCode string
+	var msgColorCode Color
 	if symbol == p.failSymbol && p.failColor != ColorDefault {
-		msgColorCode = p.failColor.getColorCode()
+		msgColorCode = p.failColor
 	} else {
-		msgColorCode = p.textColor.getColorCode()
+		msgColorCode = p.textColor
 	}
-	symColorCode := symbolColor.getColorCode()
 	prefixPart := p.buildPrefixPart()
 
 	if p.position == PositionLeft {
 		format := "%s%s%c%s %s%s%s\n"
-		fmt.Printf(format, prefixPart, symColorCode, symbol, reset, msgColorCode, msg, reset)
+		fmt.Printf(format, prefixPart, symbolColor, symbol, ColorReset, msgColorCode, msg, ColorReset)
 	} else {
 		format := "%s%s%s%s %s%c%s\n"
-		fmt.Printf(format, prefixPart, msgColorCode, msg, reset, symColorCode, symbol, reset)
+		fmt.Printf(format, prefixPart, msgColorCode, msg, ColorReset, symbolColor, symbol, ColorReset)
 	}
 }
 
