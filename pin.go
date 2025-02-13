@@ -75,6 +75,7 @@ type Color int
 
 const (
 	ColorDefault Color = iota
+	ColorReset
 	ColorBlack
 	ColorRed
 	ColorGreen
@@ -333,7 +334,7 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 			case <-ticker.C:
 				spinnerColorCode := p.spinnerColor.getColorCode()
 				textColorCode := p.textColor.getColorCode()
-				reset := "\033[0m"
+				reset := ColorReset.getColorCode()
 				prefixPart := p.buildPrefixPart()
 
 				p.messageMu.RLock()
@@ -427,6 +428,8 @@ func (p *Pin) getSeparatorColorCode() string {
 // getColorCode returns the ANSI color code for the given color
 func (c Color) getColorCode() string {
 	switch c {
+	case ColorReset:
+		return "\033[0m"
 	case ColorBlack:
 		return "\033[30m"
 	case ColorRed:
@@ -477,13 +480,13 @@ func (p *Pin) buildPrefixPart() string {
 	if p.prefix == "" {
 		return ""
 	}
-	reset := "\033[0m"
+	reset :=  ColorReset.getColorCode()
 	return fmt.Sprintf("%s%s%s %s%s%s ", p.prefixColor.getColorCode(), p.prefix, reset, p.getSeparatorColorCode(), p.separator, reset)
 }
 
 // printResult prints the final message along with a symbol using the appropriate formatting.
 func (p *Pin) printResult(msg string, symbol rune, symbolColor Color) {
-	reset := "\033[0m"
+	reset := ColorReset.getColorCode()
 	var msgColorCode string
 	if symbol == p.failSymbol && p.failColor != ColorDefault {
 		msgColorCode = p.failColor.getColorCode()

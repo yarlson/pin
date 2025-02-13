@@ -195,6 +195,7 @@ func TestPositionSwitching(t *testing.T) {
 func TestAllColors(t *testing.T) {
 	colors := []pin.Color{
 		pin.ColorDefault,
+		pin.ColorReset,
 		pin.ColorBlack,
 		pin.ColorRed,
 		pin.ColorGreen,
