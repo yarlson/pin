@@ -15,6 +15,7 @@
 - 💫 Configurable prefix and separator
 - 🔤 UTF-8 symbol support
 - ✨ Ability to update the spinner message dynamically
+- 🖼️ Customizable spinner frames for unique animation effects
 - ⚙️ No external dependencies – uses only the Go standard library
 - 🚀 Compatible with Go 1.11 and later
 - ⏹ Automatically disables animations in non-interactive (piped) environments to prevent output corruption

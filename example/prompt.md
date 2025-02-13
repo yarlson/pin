@@ -60,7 +60,7 @@ go get github.com/yarlson/pin
      ```go
      func (p *Pin) UpdateMessage(message string)
      ```
-     _Description:_ Dynamically updates the spinner’s displayed message while it is still active.
+     _Description:_ Dynamically updates the spinner's displayed message while it is still active.
 
 3. **Functional Options for Customization:**
    These functions return an `Option` that customizes various aspects of the spinner.
@@ -100,7 +100,11 @@ go get github.com/yarlson/pin
    - ```go
      func WithPosition(pos Position) Option
      ```
-     _Description:_ Determines the spinner’s position relative to the message. Use `PositionLeft` (default) or `PositionRight`.
+     _Description:_ Determines the spinner's placement relative to the message text. Use `PositionLeft` (default) or `PositionRight`.
+   - ```go
+     func WithSpinnerFrames(frames []rune) Option
+     ```
+     _Description:_ Sets the spinner's frames for custom animations.
    - ```go
      func WithFailSymbol(symbol rune) Option
      ```
