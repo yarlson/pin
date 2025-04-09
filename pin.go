@@ -64,6 +64,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -245,7 +246,7 @@ type Pin struct {
 	message         string
 	messageMu       sync.RWMutex
 	stopChan        chan struct{}
-	isRunning       bool
+	isRunning       int32
 	spinnerColor    Color
 	textColor       Color
 	doneSymbol      rune
@@ -298,25 +299,25 @@ func New(message string, opts ...Option) *Pin {
 // Note: Canceling the returned function stops the spinner without printing
 // a final message. To print a final message, use the Stop() method.
 func (p *Pin) Start(ctx context.Context) context.CancelFunc {
-	if p.isRunning {
+	if p.IsRunning() {
 		return func() {}
 	}
 
 	if !isTerminal(p.out) {
 		ctx, cancel := context.WithCancel(ctx)
-		p.isRunning = true
+		p.setRunning(true)
 		p.messageMu.RLock()
 		msg := p.message
 		p.messageMu.RUnlock()
 		_, _ = fmt.Fprintln(p.out, msg)
 		go func() {
 			<-ctx.Done()
-			p.isRunning = false
+			p.setRunning(false)
 		}()
 		return cancel
 	}
 
-	p.isRunning = true
+	p.setRunning(true)
 
 	ctx, cancel := context.WithCancel(ctx)
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -329,7 +330,7 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 			case <-p.stopChan:
 				return
 			case <-ctx.Done():
-				p.isRunning = false
+				p.setRunning(false)
 				_, _ = fmt.Fprint(p.out, "\r\033[K")
 				return
 			case <-ticker.C:
@@ -369,7 +370,7 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 
 // Stop halts the spinner animation and optionally displays a final message.
 func (p *Pin) Stop(message ...string) {
-	if !p.isRunning {
+	if !p.IsRunning() {
 		return
 	}
 
@@ -377,7 +378,7 @@ func (p *Pin) Stop(message ...string) {
 		return
 	}
 
-	p.isRunning = false
+	p.setRunning(false)
 	p.stopChan <- struct{}{}
 	p.wg.Wait()
 
@@ -391,7 +392,7 @@ func (p *Pin) Stop(message ...string) {
 // Fail halts the spinner animation and displays a failure message.
 // This method is similar to Stop but uses a distinct symbol and color scheme to indicate an error state.
 func (p *Pin) Fail(message ...string) {
-	if !p.isRunning {
+	if !p.IsRunning() {
 		return
 	}
 
@@ -399,7 +400,7 @@ func (p *Pin) Fail(message ...string) {
 		return
 	}
 
-	p.isRunning = false
+	p.setRunning(false)
 	p.stopChan <- struct{}{}
 	p.wg.Wait()
 
@@ -412,7 +413,7 @@ func (p *Pin) Fail(message ...string) {
 
 // UpdateMessage changes the message shown next to the spinner.
 func (p *Pin) UpdateMessage(message string) {
-	if !p.isRunning {
+	if !p.IsRunning() {
 		return
 	}
 
@@ -508,7 +509,7 @@ func (p *Pin) handleNonTerminal(message ...string) bool {
 		if len(message) > 0 {
 			_, _ = fmt.Fprintln(p.out, message[0])
 		}
-		p.isRunning = false
+		p.setRunning(false)
 		return true
 	}
 	return false
@@ -521,5 +522,14 @@ func (p *Pin) Message() string {
 
 // IsRunning returns whether the spinner is active.
 func (p *Pin) IsRunning() bool {
-	return p.isRunning
+	return atomic.LoadInt32(&p.isRunning) == 1
+}
+
+// setRunning sets the running state of the spinner.
+func (p *Pin) setRunning(running bool) {
+	var val int32
+	if running {
+		val = 1
+	}
+	atomic.StoreInt32(&p.isRunning, val)
 }
