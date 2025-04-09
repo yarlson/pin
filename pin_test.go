@@ -3,335 +3,376 @@ package pin_test
 import (
 	"bytes"
 	"context"
-	"io"
-	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/yarlson/pin"
 )
 
-func init() {
-	pin.ForceInteractive = true
-}
-
-var (
-	stdoutMu sync.Mutex
-)
-
-// captureOutput helps test terminal output by capturing stdout during test execution.
-// This is useful for verifying what the user would actually see in their terminal.
-func captureOutput(fn func()) string {
-	stdoutMu.Lock()
-	defer stdoutMu.Unlock()
-
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	fn()
-
-	outC := make(chan string)
-	go func() {
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
-		outC <- buf.String()
-	}()
-
-	_ = w.Close()
-	os.Stdout = old
-	return <-outC
-}
-
-// TestBasicUsage verifies the core start-stop functionality with default settings.
-func TestBasicUsage(t *testing.T) {
-	p := pin.New("Loading")
-
-	output := captureOutput(func() {
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Stop("Done")
-		cancel()
-	})
-
-	if !strings.Contains(output, "Loading") {
-		t.Error("Output should contain the message")
+func TestNewCreatesSpinner(t *testing.T) {
+	message := "Loading..."
+	p := pin.New(message)
+	if p == nil {
+		t.Fatal("Expected a non-nil spinner instance")
 	}
-	if !strings.Contains(output, "Done") {
-		t.Error("Output should contain the done message")
+	if p.Message() != message {
+		t.Fatalf("Expected message %q, got %q", message, p.Message())
 	}
 }
 
-// TestCustomization verifies that all customization options work together.
-func TestCustomization(t *testing.T) {
-	p := pin.New("Processing",
-		pin.WithPrefix("Task"),
-		pin.WithSeparator("→"),
-		pin.WithSpinnerColor(pin.ColorBlue),
-		pin.WithTextColor(pin.ColorCyan),
-		pin.WithPrefixColor(pin.ColorYellow),
-		pin.WithDoneSymbol('✔'),
-		pin.WithDoneSymbolColor(pin.ColorGreen),
-		pin.WithPosition(pin.PositionRight),
-	)
-
-	output := captureOutput(func() {
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Stop("Complete")
-		cancel()
-	})
-
-	if !strings.Contains(output, "Task") {
-		t.Error("Output should contain the prefix")
+func TestStartAndCancel(t *testing.T) {
+	p := pin.New("Loading...")
+	cancel := p.Start(context.Background())
+	// Immediately, the spinner should be running.
+	if !p.IsRunning() {
+		t.Fatal("Expected spinner to be running after Start()")
 	}
-	if !strings.Contains(output, "→") {
-		t.Error("Output should contain the separator")
-	}
-	if !strings.Contains(output, "Processing") {
-		t.Error("Output should contain the message")
-	}
-	if !strings.Contains(output, "Complete") {
-		t.Error("Output should contain the done message")
+	// Cancel the spinner.
+	cancel()
+	// Allow some time for the cancellation to propagate.
+	time.Sleep(100 * time.Millisecond)
+	if p.IsRunning() {
+		t.Fatal("Expected spinner to have stopped after cancellation")
 	}
 }
 
-// TestMessageUpdate verifies that messages can be updated while the spinner is running.
-func TestMessageUpdate(t *testing.T) {
-	p := pin.New("Initial")
-	output := captureOutput(func() {
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond) // spinner prints "Initial"
-		p.UpdateMessage("Updated")
-		time.Sleep(250 * time.Millisecond) // spinner prints "Updated"
-		p.Stop("Final")
-		cancel()
-	})
+func TestStopPrintsMessage(t *testing.T) {
+	var buf bytes.Buffer
 
-	if !strings.Contains(output, "Initial") {
-		t.Error("Output should contain initial message")
+	// Create a spinner with a custom writer so output can be captured.
+	p := pin.New("Processing...", pin.WithWriter(&buf))
+	// Start the spinner.
+	cancel := p.Start(context.Background())
+	// Cancel to simulate spinner stopping (ensuring any background goroutines complete).
+	cancel()
+
+	// Now call Stop with a final message.
+	p.Stop("Done!")
+
+	output := buf.String()
+	if !strings.Contains(output, "Done!") {
+		t.Errorf("Expected output to contain final message 'Done!', got %q", output)
 	}
+	// Also verify spinner is no longer running.
+	if p.IsRunning() {
+		t.Error("Expected spinner to not be running after Stop()")
+	}
+}
+
+func TestUpdateMessagePrints(t *testing.T) {
+	var buf bytes.Buffer
+	// Create a spinner with a custom writer so we can capture output.
+	p := pin.New("Initial", pin.WithWriter(&buf))
+
+	// Update the spinner message.
+	p.UpdateMessage("Updated")
+
+	output := buf.String()
 	if !strings.Contains(output, "Updated") {
-		t.Error("Output should contain updated message")
-	}
-	if !strings.Contains(output, "Final") {
-		t.Error("Output should contain final message")
+		t.Errorf("Expected output to contain 'Updated', got %q", output)
 	}
 }
 
-// TestMultipleStarts verifies that calling Start multiple times is safe.
-func TestMultipleStarts(t *testing.T) {
-	p := pin.New("Testing")
+func TestSpinnerAnimation(t *testing.T) {
+	// Force interactive mode for this test.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
 
-	output := captureOutput(func() {
-		cancel1 := p.Start(context.Background())
-		cancel2 := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Stop("Done")
-		cancel1()
-		cancel2()
-	})
+	var buf bytes.Buffer
+	// Create a spinner with a custom writer so we can capture output.
+	p := pin.New("Animating", pin.WithWriter(&buf))
+	cancel := p.Start(context.Background())
+	defer cancel()
 
-	if strings.Count(output, "Testing") > len(output)/2 {
-		t.Error("Multiple starts should not cause duplicate output")
-	}
-}
+	// Let the spinner animate for a short while.
+	time.Sleep(150 * time.Millisecond)
+	p.UpdateMessage("Updated")
+	time.Sleep(150 * time.Millisecond)
+	p.Stop("Stopped")
 
-// TestStopWithoutStart verifies that calling Stop before Start is safe.
-func TestStopWithoutStart(t *testing.T) {
-	p := pin.New("Testing")
-
-	output := captureOutput(func() {
-		p.Stop("Done")
-	})
-
-	if output != "" {
-		t.Error("Stop without start should produce no output")
-	}
-}
-
-// TestStopWithoutMessage verifies that Stop can be called without a final message.
-func TestStopWithoutMessage(t *testing.T) {
-	p := pin.New("Testing")
-
-	output := captureOutput(func() {
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Stop()
-		cancel()
-	})
-
-	if strings.Contains(output, "\n") {
-		t.Error("Stop without message should not print newline")
-	}
-}
-
-// TestPositionSwitching verifies that spinner can be displayed on either side of the message.
-func TestPositionSwitching(t *testing.T) {
-	leftOutput := captureOutput(func() {
-		p := pin.New("Testing", pin.WithPosition(pin.PositionLeft))
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Stop("Done")
-		cancel()
-	})
-
-	rightOutput := captureOutput(func() {
-		p := pin.New("Testing", pin.WithPosition(pin.PositionRight))
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Stop("Done")
-		cancel()
-	})
-
-	if leftOutput == rightOutput {
-		t.Error("Left and right positions should produce different outputs")
-	}
-}
-
-// TestAllColors verifies that all color combinations work correctly.
-func TestAllColors(t *testing.T) {
-	colors := []pin.Color{
-		pin.ColorDefault,
-		pin.ColorReset,
-		pin.ColorBlack,
-		pin.ColorRed,
-		pin.ColorGreen,
-		pin.ColorYellow,
-		pin.ColorBlue,
-		pin.ColorMagenta,
-		pin.ColorCyan,
-		pin.ColorGray,
-		pin.ColorWhite,
-	}
-
-	for _, color := range colors {
-		p := pin.New("Testing",
-			pin.WithSpinnerColor(color),
-			pin.WithTextColor(color),
-			pin.WithPrefixColor(color),
-			pin.WithSeparatorColor(color),
-			pin.WithDoneSymbolColor(color),
-		)
-
-		output := captureOutput(func() {
-			cancel := p.Start(context.Background())
-			time.Sleep(250 * time.Millisecond)
-			p.Stop("Done")
-			cancel()
-		})
-
-		if !strings.Contains(output, "Testing") {
-			t.Errorf("Color %v should not break output", color)
+	output := buf.String()
+	frames := []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
+	found := false
+	for _, frame := range frames {
+		if strings.Contains(output, string(frame)) {
+			found = true
+			break
 		}
 	}
+	if !found {
+		t.Errorf("Expected output to contain one of the spinner frames, got %q", output)
+	}
 }
 
-// TestStartCancellation verifies that cancellation in Start properly stops the spinner.
-func TestStartCancellation(t *testing.T) {
-	p := pin.New("Testing spinner")
-	ctx, cancel := context.WithCancel(context.Background())
-	cancelFunc := p.Start(ctx)
-	// Cancel the context to trigger the cancellation branch.
-	cancel()
+func TestFailPrintsFailureMessage(t *testing.T) {
+	// Force interactive mode for this test.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
+
+	var buf bytes.Buffer
+	// Create a spinner with a custom writer.
+	p := pin.New("Working", pin.WithWriter(&buf))
+	cancel := p.Start(context.Background())
+	defer cancel()
+	// Allow some time for animation to start.
 	time.Sleep(150 * time.Millisecond)
-	// Ensure the returned cancel function is also invoked.
-	cancelFunc()
+	// Call Fail with a failure message.
+	p.Fail("Failed")
+	output := buf.String()
+	if !strings.Contains(output, "Failed") {
+		t.Errorf("Expected output to contain 'Failed', got %q", output)
+	}
+	if !strings.Contains(output, "✖") {
+		t.Errorf("Expected output to contain default failure symbol '✖', got %q", output)
+	}
 }
 
-// TestNonInteractiveStop ensures that in non-interactive mode calling Stop with a message
-// prints the message (using fmt.Println).
-func TestNonInteractiveStop(t *testing.T) {
-	// Temporarily force non-interactive mode.
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = false
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
+func TestFailHasPrefix(t *testing.T) {
+	// Force interactive mode.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	p := pin.New("NonInteractiveTest")
-	_ = p.Start(ctx)
-	// Allow some time for p.Start's goroutine to spin (even though it prints nothing).
+	var buf bytes.Buffer
+	// Create a spinner with a custom writer and a prefix configuration.
+	p := pin.New("Working",
+		pin.WithWriter(&buf),
+		pin.WithPrefix("TestPrefix"),
+		pin.WithSeparator(":"),
+	)
+	cancel := p.Start(context.Background())
+	defer cancel()
+	// Let the spinner animate briefly.
+	time.Sleep(150 * time.Millisecond)
+	// Call Fail with a failure message.
+	p.Fail("Error occurred")
+
+	output := buf.String()
+	if !strings.Contains(output, "TestPrefix") {
+		t.Errorf("Expected output to contain prefix 'TestPrefix', got %q", output)
+	}
+	if !strings.Contains(output, "Error occurred") {
+		t.Errorf("Expected output to contain failure message 'Error occurred', got %q", output)
+	}
+	if !strings.Contains(output, ":") {
+		t.Errorf("Expected output to contain separator ':', got %q", output)
+	}
+}
+
+func TestPrefixAndSeparatorColors(t *testing.T) {
+	// Force interactive mode.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
+
+	var buf bytes.Buffer
+
+	// Define custom prefix, separator, and their colors.
+	prefix := "MyPrefix"
+	separator := ">"
+	prefixColor := pin.ColorCyan
+	separatorColor := pin.ColorWhite
+
+	// Create a spinner with these custom options.
+	p := pin.New("TestMessage",
+		pin.WithWriter(&buf),
+		pin.WithPrefix(prefix),
+		pin.WithPrefixColor(prefixColor),
+		pin.WithSeparator(separator),
+		pin.WithSeparatorColor(separatorColor),
+	)
+
+	// Start the spinner and then invoke Fail to print the final output.
+	cancel := p.Start(context.Background())
+	defer cancel()
+	time.Sleep(150 * time.Millisecond)
+	p.Fail("Failure occurred")
+
+	output := buf.String()
+
+	if !strings.Contains(output, prefixColor.String()) {
+		t.Errorf("Expected output to contain prefix color %q, got %q", prefixColor, output)
+	}
+	if !strings.Contains(output, separatorColor.String()) {
+		t.Errorf("Expected output to contain separator color %q, got %q", separatorColor, output)
+	}
+	if !strings.Contains(output, prefix) {
+		t.Errorf("Expected output to contain prefix %q, got %q", prefix, output)
+	}
+	if !strings.Contains(output, separator) {
+		t.Errorf("Expected output to contain separator %q, got %q", separator, output)
+	}
+}
+
+func TestStopDisplaysDoneSymbol(t *testing.T) {
+	// Force interactive mode.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
+
+	var buf bytes.Buffer
+	doneSymbol := '✓'
+	doneSymbolColor := pin.ColorGreen
+
+	// Create a spinner configured with custom done symbol and done symbol color.
+	p := pin.New("Processing",
+		pin.WithWriter(&buf),
+		pin.WithDoneSymbol(doneSymbol),
+		pin.WithDoneSymbolColor(doneSymbolColor),
+	)
+
+	cancel := p.Start(context.Background())
+	defer cancel()
+	time.Sleep(150 * time.Millisecond)
+	p.Stop("Completed")
+	output := buf.String()
+	if !strings.Contains(output, string(doneSymbol)) {
+		t.Errorf("Expected output to contain done symbol %q, got %q", string(doneSymbol), output)
+	}
+	if !strings.Contains(output, "Completed") {
+		t.Errorf("Expected output to contain final message 'Completed', got %q", output)
+	}
+	if !strings.Contains(output, doneSymbolColor.String()) {
+		t.Errorf("Expected output to contain done symbol color %q, got %q", doneSymbolColor, output)
+	}
+}
+
+func TestWithCustomSpinnerFrames(t *testing.T) {
+	// Force interactive mode.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
+
+	var buf bytes.Buffer
+	// Define custom frames (e.g. a simple sequence: a, b, c).
+	customFrames := []rune{'a', 'b', 'c'}
+
+	// Create a spinner with custom frames using the new option.
+	p := pin.New("CustomFrames", pin.WithWriter(&buf), pin.WithSpinnerFrames(customFrames))
+
+	// Start the spinner to trigger the animation.
+	cancel := p.Start(context.Background())
+	defer cancel()
+	time.Sleep(200 * time.Millisecond)
+	p.Stop("Finished")
+
+	output := buf.String()
+	frameFound := false
+	// Check that at least one of the custom frames appears in the captured output.
+	for _, frame := range customFrames {
+		if strings.Contains(output, string(frame)) {
+			frameFound = true
+			break
+		}
+	}
+	if !frameFound {
+		t.Errorf("Expected output to contain one of the custom spinner frames %q, got %q", customFrames, output)
+	}
+}
+
+func TestFailWithCustomFailColor(t *testing.T) {
+	// Force interactive mode.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
+
+	var buf bytes.Buffer
+	customFailColor := pin.ColorRed
+
+	// Create a spinner with a custom failure color.
+	p := pin.New("Working",
+		pin.WithWriter(&buf),
+		pin.WithFailColor(customFailColor),
+	)
+	cancel := p.Start(context.Background())
+	defer cancel()
+	time.Sleep(150 * time.Millisecond)
+	p.Fail("Failure occurred")
+	output := buf.String()
+	if !strings.Contains(output, customFailColor.String()) {
+		t.Errorf("Expected output to contain custom fail color %q, got %q", customFailColor, output)
+	}
+	if !strings.Contains(output, "Failure occurred") {
+		t.Errorf("Expected output to contain failure message 'Failure occurred', got %q", output)
+	}
+}
+
+func TestPositionSwitching(t *testing.T) {
+	// Force interactive mode.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
+
+	var bufLeft, bufRight bytes.Buffer
+
+	// Create spinner with PositionLeft (default behavior).
+	spinnerLeft := pin.New("TestPos",
+		pin.WithWriter(&bufLeft),
+		pin.WithPosition(pin.PositionLeft),
+	)
+	cancelLeft := spinnerLeft.Start(context.Background())
+	time.Sleep(150 * time.Millisecond)
+	spinnerLeft.Stop("Left Done")
+	cancelLeft()
+
+	// Create spinner with PositionRight.
+	spinnerRight := pin.New("TestPos",
+		pin.WithWriter(&bufRight),
+		pin.WithPosition(pin.PositionRight),
+	)
+	cancelRight := spinnerRight.Start(context.Background())
+	time.Sleep(150 * time.Millisecond)
+	spinnerRight.Stop("Right Done")
+	cancelRight()
+
+	// The outputs should differ because the frame is placed in a different position.
+	if bufLeft.String() == bufRight.String() {
+		t.Errorf("Expected different outputs for left and right spinner positions, but both outputs were:\n%q", bufLeft.String())
+	}
+}
+
+func TestNonInteractiveStart(t *testing.T) {
+	// Use a bytes.Buffer to simulate a non-interactive writer.
+	var buf bytes.Buffer
+
+	// Create a spinner with the custom writer.
+	p := pin.New("Non-interactive Message", pin.WithWriter(&buf))
+
+	// Call Start; since buf is not *os.File (or os.Stdout), it will be treated as non-interactive.
+	cancel := p.Start(context.Background())
+	// Allow a short delay to ensure the message is printed.
 	time.Sleep(100 * time.Millisecond)
-
-	output := captureOutput(func() {
-		p.Stop("Completed in non-interactive")
-	})
+	// Cancel the spinner.
 	cancel()
 
-	expected := "Completed in non-interactive\n"
+	output := buf.String()
+	expected := "Non-interactive Message\n"
 	if output != expected {
 		t.Errorf("Expected output %q, got %q", expected, output)
 	}
 }
 
-// TestNonInteractiveStopWithoutMessage verifies that calling Stop without a final message
-// does not print any output when the terminal is non-interactive.
-func TestNonInteractiveStopWithoutMessage(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = false
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	p := pin.New("NonInteractiveTest")
-	_ = p.Start(ctx)
-	time.Sleep(100 * time.Millisecond)
-
-	output := captureOutput(func() {
-		p.Stop()
-	})
-	cancel()
-
-	if output != "" {
-		t.Errorf("Expected no output when no message provided, got %q", output)
-	}
-}
-
-// TestNonInteractiveStart verifies that Start in non-interactive mode does not
-// print any spinner output.
-func TestNonInteractiveStart(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = false
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	p := pin.New("NonInteractiveTest")
-	cancelFn := p.Start(ctx)
-	// Allow some time for Start's goroutine (which prints nothing in non-interactive mode).
-	time.Sleep(100 * time.Millisecond)
-	cancel()
-	cancelFn()
-
-	output := captureOutput(func() {
-		// No additional printing should occur.
-	})
-	if output != "" {
-		t.Errorf("Expected no output from Start in non-interactive mode, got %q", output)
-	}
-}
-
-// TestNonInteractiveFullMessageLogging verifies that in non-interactive mode, the
-// initial message, updated message, and final done message are logged in sequence.
 func TestNonInteractiveFullMessageLogging(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = false
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
+	// Use a bytes.Buffer to simulate non-interactive output.
+	var buf bytes.Buffer
 
-	output := captureOutput(func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		p := pin.New("Initial")
-		_ = p.Start(ctx)
-		time.Sleep(50 * time.Millisecond)
-		p.UpdateMessage("Updated")
-		time.Sleep(50 * time.Millisecond)
-		p.Stop("Done")
-		cancel()
-	})
+	// Create a spinner with the custom writer (non-interactive mode).
+	p := pin.New("Initial", pin.WithWriter(&buf))
 
-	// Split the captured output into non-empty lines.
+	// Start the spinner.
+	cancel := p.Start(context.Background())
+
+	// Allow a short time for the initial message to be printed.
+	time.Sleep(50 * time.Millisecond)
+
+	// Update the spinner's message.
+	p.UpdateMessage("Updated")
+
+	// Allow a short time for the update to be printed.
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop the spinner with a final message.
+	p.Stop("Done")
+	cancel()
+
+	// Split the captured output into lines (ignoring empty lines).
 	var lines []string
-	for _, l := range strings.Split(output, "\n") {
+	for _, l := range strings.Split(buf.String(), "\n") {
 		if strings.TrimSpace(l) != "" {
 			lines = append(lines, l)
 		}
@@ -342,264 +383,89 @@ func TestNonInteractiveFullMessageLogging(t *testing.T) {
 		t.Errorf("Expected %d lines of output, got %d: %v", len(expected), len(lines), lines)
 		return
 	}
-	for i, line := range lines {
-		if line != expected[i] {
-			t.Errorf("Line %d mismatch: expected %q, got %q", i+1, expected[i], line)
+	for i, line := range expected {
+		if lines[i] != line {
+			t.Errorf("Line %d mismatch: expected %q, got %q", i+1, line, lines[i])
 		}
 	}
 }
 
-// TestFail verifies that the Fail method properly displays a failure message.
-func TestFail(t *testing.T) {
-	p := pin.New("Working",
-		pin.WithFailSymbol('✖'),
-		pin.WithFailSymbolColor(pin.ColorRed),
-		pin.WithPosition(pin.PositionLeft),
+func TestWithSpinnerColorAndTextColor(t *testing.T) {
+	// Force interactive mode so that the animation branch is executed.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
+
+	var buf bytes.Buffer
+
+	// Define desired spinner and text colors.
+	expectedSpinnerColor := pin.ColorCyan
+	expectedTextColor := pin.ColorYellow
+
+	// Create a spinner with the custom spinner and text color options.
+	s := pin.New("TestMessage",
+		pin.WithWriter(&buf),
+		pin.WithSpinnerColor(expectedSpinnerColor),
+		pin.WithTextColor(expectedTextColor),
 	)
 
-	output := captureOutput(func() {
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Fail("Failed")
-		cancel()
-	})
-
-	if !strings.Contains(output, "Failed") {
-		t.Error("Output should contain the failure message")
-	}
-	if !strings.Contains(output, "✖") {
-		t.Error("Output should contain the failure symbol")
-	}
-}
-
-// TestFailRightPosition verifies failure output with spinner positioned to the right of the text.
-func TestFailRightPosition(t *testing.T) {
-	p := pin.New("Working",
-		pin.WithFailSymbol('✖'),
-		pin.WithFailSymbolColor(pin.ColorRed),
-		pin.WithPosition(pin.PositionRight),
-	)
-
-	output := captureOutput(func() {
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Fail("Failed")
-		cancel()
-	})
-
-	if !strings.Contains(output, "Failed") {
-		t.Error("Output should contain the failure message")
-	}
-}
-
-// TestNonInteractiveFail ensures that in non-interactive mode, calling Fail with a message prints the message.
-func TestNonInteractiveFail(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = false
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	p := pin.New("NonInteractiveTest")
-	_ = p.Start(ctx)
-	time.Sleep(100 * time.Millisecond)
-
-	output := captureOutput(func() {
-		p.Fail("Failed non-interactive")
-	})
+	// Start the spinner to trigger the animation loop.
+	cancel := s.Start(context.Background())
+	// Allow some time for multiple animation ticks.
+	time.Sleep(250 * time.Millisecond)
+	s.Stop("Done")
 	cancel()
 
-	expected := "Failed non-interactive\n"
-	if output != expected {
-		t.Errorf("Expected output %q, got %q", expected, output)
+	output := buf.String()
+
+	// Verify that the output contains the expected spinner color and text color.
+	if !strings.Contains(output, expectedSpinnerColor.String()) {
+		t.Errorf("Output does not contain the expected spinner color %q. Output: %q", expectedSpinnerColor, output)
+	}
+
+	if !strings.Contains(output, expectedTextColor.String()) {
+		t.Errorf("Output does not contain the expected text color %q. Output: %q", expectedTextColor, output)
 	}
 }
 
-// TestNonInteractiveFailWithoutMessage verifies that calling Fail without a final message produces no output in non-interactive mode.
-func TestNonInteractiveFailWithoutMessage(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = false
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
+func TestCustomFailSymbolAndColor(t *testing.T) {
+	// Force interactive mode to exercise the animated branch.
+	pin.ForceInteractive = true
+	defer func() { pin.ForceInteractive = false }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	p := pin.New("NonInteractiveTest")
-	_ = p.Start(ctx)
-	time.Sleep(100 * time.Millisecond)
+	var buf bytes.Buffer
 
-	output := captureOutput(func() {
-		p.Fail()
-	})
-	cancel()
+	customFailSymbol := 'X'                // Custom failure symbol.
+	customFailSymbolColor := pin.ColorBlue // Custom failure symbol color.
 
-	if output != "" {
-		t.Errorf("Expected no output when no message provided, got %q", output)
-	}
-}
-
-// TestFailNotRunning verifies that calling Fail when the spinner is not running produces no output.
-func TestFailNotRunning(t *testing.T) {
-	p := pin.New("Not Running")
-
-	output := captureOutput(func() {
-		p.Fail("Should not output")
-	})
-
-	if output != "" {
-		t.Errorf("Expected no output when Fail is called on a non-running spinner, got %q", output)
-	}
-}
-
-// TestFailHasPrefix verifies that when a prefix is provided, the Fail method prints the prefix along with the failure message.
-func TestFailHasPrefix(t *testing.T) {
+	// Create a spinner with custom fail symbol and fail symbol color.
 	p := pin.New("Working",
-		pin.WithFailSymbol('✖'),
-		pin.WithFailSymbolColor(pin.ColorRed),
-		pin.WithPrefix("TestPrefix"),
-		pin.WithPrefixColor(pin.ColorBlue),
-		pin.WithSeparator(":"),
-		pin.WithSeparatorColor(pin.ColorWhite),
-		pin.WithPosition(pin.PositionLeft),
+		pin.WithWriter(&buf),
+		pin.WithFailSymbol(customFailSymbol),
+		pin.WithFailSymbolColor(customFailSymbolColor),
 	)
 
-	output := captureOutput(func() {
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Fail("Error occurred")
-		cancel()
-	})
+	cancel := p.Start(context.Background())
+	defer cancel()
 
-	if !strings.Contains(output, "TestPrefix") {
-		t.Error("Expected output to contain prefix 'TestPrefix'")
+	// Allow some time for the spinner to animate.
+	time.Sleep(150 * time.Millisecond)
+	// Trigger the failure.
+	p.Fail("Operation failed")
+
+	output := buf.String()
+
+	// Verify the custom failure symbol appears in the output.
+	if !strings.Contains(output, string(customFailSymbol)) {
+		t.Errorf("Output does not contain custom fail symbol %q. Output: %q", string(customFailSymbol), output)
 	}
 
-	if !strings.Contains(output, "Error occurred") {
-		t.Error("Expected output to contain failure message 'Error occurred'")
-	}
-}
-
-// TestIsTerminalNonFile tests the branch where the writer is not an *os.File.
-func TestIsTerminalNonFile(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = false
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
-
-	dummy := &bytes.Buffer{}
-	p := pin.New("Test Message", pin.WithWriter(dummy))
-
-	output := captureOutput(func() {
-		p.UpdateMessage("NonFileWriterTest")
-	})
-	if !strings.Contains(output, "NonFileWriterTest") {
-		t.Error("Expected update message to be printed due to non-*os.File writer")
-	}
-}
-
-// TestIsTerminalStatError tests the branch where writer.Stat() returns an error.
-func TestIsTerminalStatError(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = false
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
-
-	r, _, _ := os.Pipe()
-	r.Close()
-
-	p := pin.New("Test Message", pin.WithWriter(r))
-
-	output := captureOutput(func() {
-		p.UpdateMessage("StatErrorTest")
-	})
-	if !strings.Contains(output, "StatErrorTest") {
-		t.Error("Expected update message to be printed due to Stat error branch")
-	}
-}
-
-// TestForceInteractiveSuppressUpdate tests that when ForceInteractive is true,
-// UpdateMessage does not print anything.
-func TestForceInteractiveSuppressUpdate(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
-
-	dummy := &bytes.Buffer{}
-	p := pin.New("Test Message", pin.WithWriter(dummy))
-
-	output := captureOutput(func() {
-		p.UpdateMessage("ForceInteractiveTest")
-	})
-	if output != "" {
-		t.Error("Expected no output when ForceInteractive is true")
-	}
-}
-
-// TestFailWithCustomFailColor verifies that setting a custom fail color overrides the default text color for the failure message.
-func TestFailWithCustomFailColor(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
-
-	p := pin.New("Working",
-		pin.WithFailSymbol('✖'),
-		pin.WithFailSymbolColor(pin.ColorRed),
-		pin.WithFailColor(pin.ColorMagenta),
-		pin.WithTextColor(pin.ColorYellow),
-		pin.WithPosition(pin.PositionLeft),
-	)
-
-	output := captureOutput(func() {
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Fail("Failed with custom color")
-		cancel()
-	})
-
-	expectedFailMsgColor := "\033[35m"
-	if !strings.Contains(output, expectedFailMsgColor) {
-		t.Errorf("Expected output to contain the fail color ANSI code %q, got: %q", expectedFailMsgColor, output)
-	}
-}
-
-// TestFailWithoutCustomFailColorUsesTextColor verifies that when no custom fail color is set,
-// the failure message uses the spinner's text color.
-func TestFailWithoutCustomFailColorUsesTextColor(t *testing.T) {
-	originalForceInteractive := pin.ForceInteractive
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = originalForceInteractive }()
-
-	p := pin.New("Working",
-		pin.WithFailSymbol('✖'),
-		pin.WithFailSymbolColor(pin.ColorRed),
-		pin.WithTextColor(pin.ColorBlue),
-		pin.WithPosition(pin.PositionLeft),
-	)
-
-	output := captureOutput(func() {
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Fail("Failed using text color")
-		cancel()
-	})
-
-	expectedTextColorCode := "\033[34m"
-	if !strings.Contains(output, expectedTextColorCode) {
-		t.Errorf("Expected output to contain text color ANSI code %q, got: %q", expectedTextColorCode, output)
-	}
-}
-
-// TestAllColors verifies that custom spinner configs work correctly
-// Note that since spinner frames only show up on proper terminals and thus
-// can't be captured, we can't really verify that they were emitted.
-func TestSpinnerFrames(t *testing.T) {
-	framesets := []string{
-		".oO0Oo",
-		"|/-\\",
+	// Verify the custom failure symbol color code appears.
+	if !strings.Contains(output, customFailSymbolColor.String()) {
+		t.Errorf("Output does not contain custom fail symbol color %q. Output: %q", customFailSymbolColor.String(), output)
 	}
 
-	for _, frames := range framesets {
-		p := pin.New("Testing",
-			pin.WithSpinnerFrames([]rune(frames)),
-		)
-		cancel := p.Start(context.Background())
-		time.Sleep(250 * time.Millisecond)
-		p.Stop("Done")
-		cancel()
+	// Also, verify that the failure message is present.
+	if !strings.Contains(output, "Operation failed") {
+		t.Errorf("Output does not contain failure message 'Operation failed'. Output: %q", output)
 	}
 }

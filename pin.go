@@ -303,16 +303,17 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 	}
 
 	if !isTerminal(p.out) {
+		ctx, cancel := context.WithCancel(ctx)
 		p.isRunning = true
 		p.messageMu.RLock()
 		msg := p.message
 		p.messageMu.RUnlock()
-		fmt.Println(msg)
+		_, _ = fmt.Fprintln(p.out, msg)
 		go func() {
 			<-ctx.Done()
 			p.isRunning = false
 		}()
-		return func() {}
+		return cancel
 	}
 
 	p.isRunning = true
@@ -329,7 +330,7 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 				return
 			case <-ctx.Done():
 				p.isRunning = false
-				fmt.Print("\r\033[K")
+				_, _ = fmt.Fprint(p.out, "\r\033[K")
 				return
 			case <-ticker.C:
 				prefixPart := p.buildPrefixPart()
@@ -357,7 +358,7 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 					}
 				}
 
-				fmt.Printf(format, args...)
+				_, _ = fmt.Fprintf(p.out, format, args...)
 				p.current = (p.current + 1) % len(p.frames)
 			}
 		}
@@ -379,7 +380,7 @@ func (p *Pin) Stop(message ...string) {
 	p.stopChan <- struct{}{}
 	p.wg.Wait()
 
-	fmt.Print("\r\033[K")
+	_, _ = fmt.Fprint(p.out, "\r\033[K")
 
 	if len(message) > 0 {
 		p.printResult(message[0], p.doneSymbol, p.doneSymbolColor)
@@ -413,7 +414,7 @@ func (p *Pin) UpdateMessage(message string) {
 	p.message = message
 	p.messageMu.Unlock()
 	if !isTerminal(p.out) {
-		fmt.Println(message)
+		_, _ = fmt.Fprintln(p.out, message)
 	}
 }
 
@@ -487,10 +488,10 @@ func (p *Pin) printResult(msg string, symbol rune, symbolColor Color) {
 
 	if p.position == PositionLeft {
 		format := "%s%s%c%s %s%s%s\n"
-		fmt.Printf(format, prefixPart, symbolColor, symbol, ColorReset, msgColorCode, msg, ColorReset)
+		_, _ = fmt.Fprintf(p.out, format, prefixPart, symbolColor, symbol, ColorReset, msgColorCode, msg, ColorReset)
 	} else {
 		format := "%s%s%s%s %s%c%s\n"
-		fmt.Printf(format, prefixPart, msgColorCode, msg, ColorReset, symbolColor, symbol, ColorReset)
+		_, _ = fmt.Fprintf(p.out, format, prefixPart, msgColorCode, msg, ColorReset, symbolColor, symbol, ColorReset)
 	}
 }
 
@@ -499,9 +500,20 @@ func (p *Pin) printResult(msg string, symbol rune, symbolColor Color) {
 func (p *Pin) handleNonTerminal(message ...string) bool {
 	if !isTerminal(p.out) {
 		if len(message) > 0 {
-			fmt.Println(message[0])
+			_, _ = fmt.Fprintln(p.out, message[0])
 		}
+		p.isRunning = false
 		return true
 	}
 	return false
+}
+
+// Message returns the current spinner message.
+func (p *Pin) Message() string {
+	return p.message
+}
+
+// IsRunning returns whether the spinner is active.
+func (p *Pin) IsRunning() bool {
+	return p.isRunning
 }
