@@ -64,6 +64,10 @@ func TestUpdateMessagePrints(t *testing.T) {
 	var buf bytes.Buffer
 	// Create a spinner with a custom writer so we can capture output.
 	p := pin.New("Initial", pin.WithWriter(&buf))
+	// Start the spinner.
+	cancel := p.Start(context.Background())
+	// Cancel to simulate spinner stopping (ensuring any background goroutines complete).
+	cancel()
 
 	// Update the spinner message.
 	p.UpdateMessage("Updated")
@@ -467,5 +471,56 @@ func TestCustomFailSymbolAndColor(t *testing.T) {
 	// Also, verify that the failure message is present.
 	if !strings.Contains(output, "Operation failed") {
 		t.Errorf("Output does not contain failure message 'Operation failed'. Output: %q", output)
+	}
+}
+
+// New test: when Start is called while spinner is already running
+func TestStartWhenAlreadyRunning(t *testing.T) {
+	var buf bytes.Buffer
+	p := pin.New("AlreadyRunning", pin.WithWriter(&buf))
+	// Start the spinner.
+	cancel1 := p.Start(context.Background())
+	// Call Start again; as per the code, if already running it should return a no-op.
+	cancel2 := p.Start(context.Background())
+	// Cancel the second (no-op) and then cancel the first.
+	cancel2()
+	cancel1()
+	// Allow some time for cancellations.
+	time.Sleep(100 * time.Millisecond)
+	if p.IsRunning() {
+		t.Errorf("Expected spinner to have stopped after canceling both start invocations")
+	}
+}
+
+// Test calling Stop and Fail when spinner is not running should be no-ops.
+func TestStopAndFailWhenNotRunning(t *testing.T) {
+	var buf bytes.Buffer
+	p := pin.New("NotRunning", pin.WithWriter(&buf))
+	// Ensure spinner is not running.
+	if p.IsRunning() {
+		t.Fatal("Spinner should not be running at test start")
+	}
+	// Call Stop and Fail; nothing should be printed.
+	p.Stop("ShouldNotPrint")
+	p.Fail("ShouldNotPrint")
+	output := buf.String()
+	if output != "" {
+		t.Errorf("Expected no output when calling Stop/Fail on non-running spinner, got: %q", output)
+	}
+}
+
+// Test calling Fail when spinner is not running returns immediately.
+func TestFailWhenNotRunning(t *testing.T) {
+	var buf bytes.Buffer
+	p := pin.New("NotRunningFail", pin.WithWriter(&buf))
+	// Ensure spinner is not running.
+	if p.IsRunning() {
+		t.Fatal("Spinner should not be running at test start")
+	}
+	// Call Fail; should simply return.
+	p.Fail("NoOutput")
+	output := buf.String()
+	if output != "" {
+		t.Errorf("Expected no output when calling Fail on non-running spinner, got: %q", output)
 	}
 }

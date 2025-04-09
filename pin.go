@@ -369,13 +369,14 @@ func (p *Pin) Start(ctx context.Context) context.CancelFunc {
 
 // Stop halts the spinner animation and optionally displays a final message.
 func (p *Pin) Stop(message ...string) {
+	if !p.isRunning {
+		return
+	}
+
 	if p.handleNonTerminal(message...) {
 		return
 	}
 
-	if !p.isRunning {
-		return
-	}
 	p.isRunning = false
 	p.stopChan <- struct{}{}
 	p.wg.Wait()
@@ -390,13 +391,14 @@ func (p *Pin) Stop(message ...string) {
 // Fail halts the spinner animation and displays a failure message.
 // This method is similar to Stop but uses a distinct symbol and color scheme to indicate an error state.
 func (p *Pin) Fail(message ...string) {
+	if !p.isRunning {
+		return
+	}
+
 	if p.handleNonTerminal(message...) {
 		return
 	}
 
-	if !p.isRunning {
-		return
-	}
 	p.isRunning = false
 	p.stopChan <- struct{}{}
 	p.wg.Wait()
@@ -410,6 +412,10 @@ func (p *Pin) Fail(message ...string) {
 
 // UpdateMessage changes the message shown next to the spinner.
 func (p *Pin) UpdateMessage(message string) {
+	if !p.isRunning {
+		return
+	}
+
 	p.messageMu.Lock()
 	p.message = message
 	p.messageMu.Unlock()
