@@ -1,3 +1,7 @@
 coverage:
   ignore:
     - "example/*"
+  status:
+    project:
+      default:
+        target: 90%
