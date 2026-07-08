@@ -17,7 +17,7 @@
 - ✨ Ability to update the spinner message dynamically
 - 🖼️ Customizable spinner frames for unique animation effects
 - ⚙️ No external dependencies – uses only the Go standard library
-- 🚀 Compatible with Go 1.11 and later
+- 🚀 Compatible with Go 1.19 and later
 - ⏹ Automatically disables animations in non-interactive (piped) environments to prevent output corruption
 
 ## Installation
@@ -57,7 +57,7 @@ p.Stop("Done!")
 
 ## Non-interactive Behavior
 
-When the spinner detects that `stdout` is not connected to an interactive terminal (for example, when output is piped), it disables animations and outputs messages as plain text. In this mode:
+When the spinner detects that the configured writer is not connected to an interactive terminal (for example, when output is piped), it disables animations and outputs messages as plain text. In this mode:
 
 - The **initial message** is printed immediately when the spinner starts.
 - Any **updated messages** are printed as soon as you call `UpdateMessage()`.
@@ -87,7 +87,8 @@ p := pin.New("Uploading",
     pin.WithTextColor(pin.ColorCyan),
     pin.WithPrefixColor(pin.ColorYellow),
 )
-p.Start()
+cancel := p.Start(context.Background())
+defer cancel()
 // ... do work ...
 p.Stop("Upload complete")
 ```
@@ -158,8 +159,15 @@ p := pin.New("message", /* options... */)
 - `WithFailSymbolColor(color Color)` – sets the color of the failure symbol.
 - `WithFailColor(color Color)` – sets the color of the failure message text.
 - `WithPosition(pos Position)` – sets the spinner's position relative to the message.
-- `WithSpinnerFrames(frames []rune)` – sets the spinner's frames.
+- `WithSpinnerFrames(frames []rune)` – sets the spinner's frames. Nil or empty frame slices keep the default frames.
 - `WithWriter(w io.Writer)` – sets a custom writer for spinner output.
+
+### Interactive Mode Override
+
+- `SetForceInteractive(enabled bool)` – forces interactive rendering for non-terminal writers, mainly for tests and demos.
+- `ForceInteractive()` – returns whether forced interactive rendering is enabled.
+
+Earlier versions exposed `ForceInteractive` as a mutable package variable. Use these functions instead so concurrent tests and spinner runs stay race-safe.
 
 ### Available Colors
 
@@ -176,7 +184,7 @@ p := pin.New("message", /* options... */)
 
 ## Development & Compatibility
 
-This library is written using only the Go standard library and supports Go version 1.11 and later.
+This library is written using only the Go standard library and supports Go version 1.19 and later.
 
 ### Running Tests
 

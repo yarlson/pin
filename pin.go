@@ -193,13 +193,19 @@ func WithFailColor(color Color) Option {
 // beginning to end and then start at the beginning (frames[0]) again
 func WithSpinnerFrames(frames []rune) Option {
 	return func(p *Pin) {
-		p.frames = frames
+		if len(frames) == 0 {
+			return
+		}
+		p.frames = append([]rune(nil), frames...)
 	}
 }
 
 // WithWriter sets a custom io.Writer for spinner output.
 func WithWriter(w io.Writer) Option {
 	return func(p *Pin) {
+		if w == nil {
+			return
+		}
 		p.out = w
 	}
 }
@@ -210,25 +216,28 @@ func WithWriter(w io.Writer) Option {
 // Basic usage:
 //
 //	p := pin.New("Loading")
-//	p.Start()
+//	cancel := p.Start(context.Background())
+//	defer cancel()
 //	time.Sleep(2 * time.Second)
 //	p.Stop("Done")
 //
 // Advanced usage:
 //
 //	p := pin.New("Processing")
-//	p.SetPrefix("Status")
-//	p.SetSeparator(":")
-//	p.SetSeparatorColor(pin.ColorWhite)
-//	p.SetSpinnerColor(pin.ColorCyan)
-//	p.SetTextColor(pin.ColorYellow)
-//	p.Start()
+//	p := pin.New("Processing",
+//	    pin.WithPrefix("Status"),
+//	    pin.WithSeparator(":"),
+//	    pin.WithSeparatorColor(pin.ColorWhite),
+//	    pin.WithSpinnerColor(pin.ColorCyan),
+//	    pin.WithTextColor(pin.ColorYellow),
+//	)
+//	cancel := p.Start(context.Background())
+//	defer cancel()
 //
 //	// Update message during operation
 //	p.UpdateMessage("Still working...")
 //
 //	// Complete with success
-//	p.SetDoneSymbolColor(pin.ColorGreen)
 //	p.Stop("Completed!")
 //
 // You can also indicate failure using the Fail method:
@@ -237,7 +246,8 @@ func WithWriter(w io.Writer) Option {
 //	    WithFailSymbol('✖'),
 //	    WithFailSymbolColor(ColorRed),
 //	)
-//	p.Start()
+//	cancel := p.Start(context.Background())
+//	defer cancel()
 //	// ... error occurred ...
 //	p.Fail("Deployment failed")
 type Pin struct {
@@ -245,8 +255,10 @@ type Pin struct {
 	current         int
 	message         string
 	messageMu       sync.RWMutex
-	stopChan        chan struct{}
-	isRunning       int32
+	lifecycleMu     sync.Mutex
+	writeMu         sync.Mutex
+	running         atomic.Bool
+	run             *pinRun
 	spinnerColor    Color
 	textColor       Color
 	doneSymbol      rune
@@ -260,7 +272,15 @@ type Pin struct {
 	separatorColor  Color
 	position        Position
 	out             io.Writer
-	wg              sync.WaitGroup
+}
+
+type pinRun struct {
+	cancel    context.CancelFunc
+	stop      chan struct{}
+	done      chan struct{}
+	terminal  bool
+	finishing bool
+	stopOnce  sync.Once
 }
 
 var defaultFrames = []rune{
@@ -273,7 +293,6 @@ func New(message string, opts ...Option) *Pin {
 	p := &Pin{
 		frames:          defaultFrames,
 		message:         message,
-		stopChan:        make(chan struct{}, 1),
 		spinnerColor:    ColorDefault,
 		textColor:       ColorDefault,
 		doneSymbol:      '✓',
@@ -299,130 +318,199 @@ func New(message string, opts ...Option) *Pin {
 // Note: Canceling the returned function stops the spinner without printing
 // a final message. To print a final message, use the Stop() method.
 func (p *Pin) Start(ctx context.Context) context.CancelFunc {
-	if p.IsRunning() {
+	p.lifecycleMu.Lock()
+	if p.run != nil {
+		p.lifecycleMu.Unlock()
 		return func() {}
 	}
 
-	if !isTerminal(p.out) {
-		ctx, cancel := context.WithCancel(ctx)
-		p.setRunning(true)
-		p.messageMu.RLock()
-		msg := p.message
-		p.messageMu.RUnlock()
-		_, _ = fmt.Fprintln(p.out, msg)
-		go func() {
-			<-ctx.Done()
-			p.setRunning(false)
-		}()
-		return cancel
+	ctx, cancel := context.WithCancel(ctx)
+	run := &pinRun{
+		cancel:   cancel,
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
+		terminal: isTerminal(p.out),
+	}
+	p.run = run
+	p.running.Store(true)
+
+	if !run.terminal {
+		msg := p.messageSnapshot()
+		p.lifecycleMu.Unlock()
+		p.writeLine(msg)
+		go p.runNonTerminal(ctx, run)
+		return func() {
+			p.cancelRun(run)
+		}
 	}
 
-	p.setRunning(true)
+	go p.runTerminal(ctx, run)
+	p.lifecycleMu.Unlock()
 
-	ctx, cancel := context.WithCancel(ctx)
-	ticker := time.NewTicker(100 * time.Millisecond)
-	p.wg.Add(1)
-	go func() {
-		defer ticker.Stop()
-		defer p.wg.Done()
-		for {
-			select {
-			case <-p.stopChan:
-				return
-			case <-ctx.Done():
-				p.setRunning(false)
-				_, _ = fmt.Fprint(p.out, "\r\033[K")
-				return
-			case <-ticker.C:
-				prefixPart := p.buildPrefixPart()
-
-				p.messageMu.RLock()
-				message := p.message
-				p.messageMu.RUnlock()
-
-				var format string
-				var args []interface{}
-
-				if p.position == PositionLeft {
-					format = "\r\033[K%s%s%c%s %s%s%s"
-					args = []interface{}{
-						prefixPart,
-						p.spinnerColor, p.frames[p.current], ColorReset,
-						p.textColor, message, ColorReset,
-					}
-				} else {
-					format = "\r\033[K%s%s%s%s %s%c%s "
-					args = []interface{}{
-						prefixPart,
-						p.textColor, message, ColorReset,
-						p.textColor, p.frames[p.current], ColorReset,
-					}
-				}
-
-				_, _ = fmt.Fprintf(p.out, format, args...)
-				p.current = (p.current + 1) % len(p.frames)
-			}
-		}
-	}()
-
-	return cancel
+	return func() {
+		p.cancelRun(run)
+	}
 }
 
 // Stop halts the spinner animation and optionally displays a final message.
 func (p *Pin) Stop(message ...string) {
-	if !p.IsRunning() {
-		return
-	}
-
-	if p.handleNonTerminal(message...) {
-		return
-	}
-
-	p.setRunning(false)
-	p.stopChan <- struct{}{}
-	p.wg.Wait()
-
-	_, _ = fmt.Fprint(p.out, "\r\033[K")
-
-	if len(message) > 0 {
-		p.printResult(message[0], p.doneSymbol, p.doneSymbolColor)
-	}
+	p.finish(message, p.doneSymbol, p.doneSymbolColor)
 }
 
 // Fail halts the spinner animation and displays a failure message.
 // This method is similar to Stop but uses a distinct symbol and color scheme to indicate an error state.
 func (p *Pin) Fail(message ...string) {
-	if !p.IsRunning() {
-		return
-	}
-
-	if p.handleNonTerminal(message...) {
-		return
-	}
-
-	p.setRunning(false)
-	p.stopChan <- struct{}{}
-	p.wg.Wait()
-
-	fmt.Print("\r\033[K")
-
-	if len(message) > 0 {
-		p.printResult(message[0], p.failSymbol, p.failSymbolColor)
-	}
+	p.finish(message, p.failSymbol, p.failSymbolColor)
 }
 
 // UpdateMessage changes the message shown next to the spinner.
 func (p *Pin) UpdateMessage(message string) {
-	if !p.IsRunning() {
-		return
-	}
-
 	p.messageMu.Lock()
 	p.message = message
 	p.messageMu.Unlock()
-	if !isTerminal(p.out) {
-		_, _ = fmt.Fprintln(p.out, message)
+
+	p.lifecycleMu.Lock()
+	run := p.run
+	if run == nil || run.finishing || run.terminal {
+		p.lifecycleMu.Unlock()
+		return
 	}
+	p.lifecycleMu.Unlock()
+
+	p.writeLine(message)
+}
+
+func (p *Pin) runTerminal(ctx context.Context, run *pinRun) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	defer p.completeRun(run)
+
+	for {
+		select {
+		case <-run.stop:
+			return
+		case <-ctx.Done():
+			p.writeString("\r\033[K")
+			return
+		case <-ticker.C:
+			p.writeFrame()
+		}
+	}
+}
+
+func (p *Pin) runNonTerminal(ctx context.Context, run *pinRun) {
+	defer p.completeRun(run)
+
+	select {
+	case <-run.stop:
+	case <-ctx.Done():
+	}
+}
+
+func (p *Pin) finish(message []string, symbol rune, symbolColor Color) {
+	run := p.claimRun()
+	if run == nil {
+		return
+	}
+
+	run.stopOnce.Do(func() {
+		close(run.stop)
+	})
+	run.cancel()
+	<-run.done
+
+	if run.terminal {
+		p.writeString("\r\033[K")
+		if len(message) > 0 {
+			p.printResult(message[0], symbol, symbolColor)
+		}
+	} else if len(message) > 0 {
+		p.writeLine(message[0])
+	}
+
+	p.clearFinishedRun(run)
+}
+
+func (p *Pin) cancelRun(run *pinRun) {
+	if !p.claimSpecificRun(run) {
+		return
+	}
+
+	run.cancel()
+	<-run.done
+	p.clearFinishedRun(run)
+}
+
+func (p *Pin) claimRun() *pinRun {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+
+	run := p.run
+	if run == nil || run.finishing {
+		return nil
+	}
+	run.finishing = true
+	p.running.Store(false)
+	return run
+}
+
+func (p *Pin) claimSpecificRun(run *pinRun) bool {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+
+	if p.run != run || run == nil || run.finishing {
+		return false
+	}
+	run.finishing = true
+	p.running.Store(false)
+	return true
+}
+
+func (p *Pin) completeRun(run *pinRun) {
+	p.lifecycleMu.Lock()
+	if p.run == run && !run.finishing {
+		p.run = nil
+		p.running.Store(false)
+	}
+	p.lifecycleMu.Unlock()
+	close(run.done)
+}
+
+func (p *Pin) clearFinishedRun(run *pinRun) {
+	p.lifecycleMu.Lock()
+	if p.run == run {
+		p.run = nil
+	}
+	p.lifecycleMu.Unlock()
+}
+
+func (p *Pin) writeFrame() {
+	prefixPart := p.buildPrefixPart()
+	message := p.messageSnapshot()
+
+	if p.position == PositionLeft {
+		p.writeFormatted(
+			"\r\033[K%s%s%c%s %s%s%s",
+			prefixPart,
+			p.spinnerColor, p.frames[p.current], ColorReset,
+			p.textColor, message, ColorReset,
+		)
+	} else {
+		p.writeFormatted(
+			"\r\033[K%s%s%s%s %s%c%s ",
+			prefixPart,
+			p.textColor, message, ColorReset,
+			p.spinnerColor, p.frames[p.current], ColorReset,
+		)
+	}
+
+	p.current = (p.current + 1) % len(p.frames)
+}
+
+func (p *Pin) messageSnapshot() string {
+	p.messageMu.RLock()
+	defer p.messageMu.RUnlock()
+	return p.message
 }
 
 // String returns the ANSI color code for the given color
@@ -455,7 +543,7 @@ func (c Color) String() string {
 
 // isTerminal checks if the provided writer is a terminal.
 func isTerminal(w io.Writer) bool {
-	if ForceInteractive {
+	if ForceInteractive() {
 		return true
 	}
 
@@ -473,7 +561,19 @@ func isTerminal(w io.Writer) bool {
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
-var ForceInteractive bool
+var forceInteractive atomic.Bool
+
+// SetForceInteractive controls whether Pin treats every writer as interactive.
+// It is intended for tests and terminal integrations that already know they
+// want animated output.
+func SetForceInteractive(enabled bool) {
+	forceInteractive.Store(enabled)
+}
+
+// ForceInteractive returns whether Pin is forced into interactive mode.
+func ForceInteractive() bool {
+	return forceInteractive.Load()
+}
 
 // buildPrefixPart constructs the prefix string (including colors) if a prefix is set.
 func (p *Pin) buildPrefixPart() string {
@@ -495,41 +595,37 @@ func (p *Pin) printResult(msg string, symbol rune, symbolColor Color) {
 
 	if p.position == PositionLeft {
 		format := "%s%s%c%s %s%s%s\n"
-		_, _ = fmt.Fprintf(p.out, format, prefixPart, symbolColor, symbol, ColorReset, msgColorCode, msg, ColorReset)
+		p.writeFormatted(format, prefixPart, symbolColor, symbol, ColorReset, msgColorCode, msg, ColorReset)
 	} else {
 		format := "%s%s%s%s %s%c%s\n"
-		_, _ = fmt.Fprintf(p.out, format, prefixPart, msgColorCode, msg, ColorReset, symbolColor, symbol, ColorReset)
+		p.writeFormatted(format, prefixPart, msgColorCode, msg, ColorReset, symbolColor, symbol, ColorReset)
 	}
 }
 
-// handleNonTerminal checks if stdout is non-terminal.
-// If yes, it prints a plain message (if provided) and returns true.
-func (p *Pin) handleNonTerminal(message ...string) bool {
-	if !isTerminal(p.out) {
-		if len(message) > 0 {
-			_, _ = fmt.Fprintln(p.out, message[0])
-		}
-		p.setRunning(false)
-		return true
-	}
-	return false
+func (p *Pin) writeLine(message string) {
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
+	_, _ = fmt.Fprintln(p.out, message)
+}
+
+func (p *Pin) writeString(message string) {
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
+	_, _ = fmt.Fprint(p.out, message)
+}
+
+func (p *Pin) writeFormatted(format string, args ...interface{}) {
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
+	_, _ = fmt.Fprintf(p.out, format, args...)
 }
 
 // Message returns the current spinner message.
 func (p *Pin) Message() string {
-	return p.message
+	return p.messageSnapshot()
 }
 
 // IsRunning returns whether the spinner is active.
 func (p *Pin) IsRunning() bool {
-	return atomic.LoadInt32(&p.isRunning) == 1
-}
-
-// setRunning sets the running state of the spinner.
-func (p *Pin) setRunning(running bool) {
-	var val int32
-	if running {
-		val = 1
-	}
-	atomic.StoreInt32(&p.isRunning, val)
+	return p.running.Load()
 }

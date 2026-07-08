@@ -3,12 +3,59 @@ package pin_test
 import (
 	"bytes"
 	"context"
+	"io"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/yarlson/pin"
 )
+
+func forceInteractive(t *testing.T) {
+	t.Helper()
+	pin.SetForceInteractive(true)
+	t.Cleanup(func() {
+		pin.SetForceInteractive(false)
+	})
+}
+
+func waitFor(t *testing.T, condition func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("condition was not met before timeout")
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *lockedBuffer) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Len()
+}
 
 func TestNewCreatesSpinner(t *testing.T) {
 	message := "Loading..."
@@ -22,7 +69,8 @@ func TestNewCreatesSpinner(t *testing.T) {
 }
 
 func TestStartAndCancel(t *testing.T) {
-	p := pin.New("Loading...")
+	var buf bytes.Buffer
+	p := pin.New("Loading...", pin.WithWriter(&buf))
 	cancel := p.Start(context.Background())
 	// Immediately, the spinner should be running.
 	if !p.IsRunning() {
@@ -44,8 +92,7 @@ func TestStopPrintsMessage(t *testing.T) {
 	p := pin.New("Processing...", pin.WithWriter(&buf))
 	// Start the spinner.
 	cancel := p.Start(context.Background())
-	// Cancel to simulate spinner stopping (ensuring any background goroutines complete).
-	cancel()
+	defer cancel()
 
 	// Now call Stop with a final message.
 	p.Stop("Done!")
@@ -66,8 +113,7 @@ func TestUpdateMessagePrints(t *testing.T) {
 	p := pin.New("Initial", pin.WithWriter(&buf))
 	// Start the spinner.
 	cancel := p.Start(context.Background())
-	// Cancel to simulate spinner stopping (ensuring any background goroutines complete).
-	cancel()
+	defer cancel()
 
 	// Update the spinner message.
 	p.UpdateMessage("Updated")
@@ -79,9 +125,7 @@ func TestUpdateMessagePrints(t *testing.T) {
 }
 
 func TestSpinnerAnimation(t *testing.T) {
-	// Force interactive mode for this test.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var buf bytes.Buffer
 	// Create a spinner with a custom writer so we can capture output.
@@ -110,9 +154,7 @@ func TestSpinnerAnimation(t *testing.T) {
 }
 
 func TestFailPrintsFailureMessage(t *testing.T) {
-	// Force interactive mode for this test.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var buf bytes.Buffer
 	// Create a spinner with a custom writer.
@@ -133,9 +175,7 @@ func TestFailPrintsFailureMessage(t *testing.T) {
 }
 
 func TestFailHasPrefix(t *testing.T) {
-	// Force interactive mode.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var buf bytes.Buffer
 	// Create a spinner with a custom writer and a prefix configuration.
@@ -164,9 +204,7 @@ func TestFailHasPrefix(t *testing.T) {
 }
 
 func TestPrefixAndSeparatorColors(t *testing.T) {
-	// Force interactive mode.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var buf bytes.Buffer
 
@@ -208,9 +246,7 @@ func TestPrefixAndSeparatorColors(t *testing.T) {
 }
 
 func TestStopDisplaysDoneSymbol(t *testing.T) {
-	// Force interactive mode.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var buf bytes.Buffer
 	doneSymbol := '✓'
@@ -240,9 +276,7 @@ func TestStopDisplaysDoneSymbol(t *testing.T) {
 }
 
 func TestWithCustomSpinnerFrames(t *testing.T) {
-	// Force interactive mode.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var buf bytes.Buffer
 	// Define custom frames (e.g. a simple sequence: a, b, c).
@@ -272,9 +306,7 @@ func TestWithCustomSpinnerFrames(t *testing.T) {
 }
 
 func TestFailWithCustomFailColor(t *testing.T) {
-	// Force interactive mode.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var buf bytes.Buffer
 	customFailColor := pin.ColorRed
@@ -298,9 +330,7 @@ func TestFailWithCustomFailColor(t *testing.T) {
 }
 
 func TestPositionSwitching(t *testing.T) {
-	// Force interactive mode.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var bufLeft, bufRight bytes.Buffer
 
@@ -395,9 +425,7 @@ func TestNonInteractiveFullMessageLogging(t *testing.T) {
 }
 
 func TestWithSpinnerColorAndTextColor(t *testing.T) {
-	// Force interactive mode so that the animation branch is executed.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var buf bytes.Buffer
 
@@ -432,9 +460,7 @@ func TestWithSpinnerColorAndTextColor(t *testing.T) {
 }
 
 func TestCustomFailSymbolAndColor(t *testing.T) {
-	// Force interactive mode to exercise the animated branch.
-	pin.ForceInteractive = true
-	defer func() { pin.ForceInteractive = false }()
+	forceInteractive(t)
 
 	var buf bytes.Buffer
 
@@ -523,4 +549,296 @@ func TestFailWhenNotRunning(t *testing.T) {
 	if output != "" {
 		t.Errorf("Expected no output when calling Fail on non-running spinner, got: %q", output)
 	}
+}
+
+func TestMessageConcurrentReadAndUpdate(t *testing.T) {
+	var buf bytes.Buffer
+	p := pin.New("Initial", pin.WithWriter(&buf))
+	cancel := p.Start(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			p.UpdateMessage("Updated")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			_ = p.Message()
+		}
+	}()
+	wg.Wait()
+}
+
+func TestWithSpinnerFramesNilUsesDefaults(t *testing.T) {
+	forceInteractive(t)
+
+	var buf lockedBuffer
+	p := pin.New("NilFrames", pin.WithWriter(&buf), pin.WithSpinnerFrames(nil))
+	cancel := p.Start(context.Background())
+	defer cancel()
+
+	waitFor(t, func() bool {
+		return containsAnyFrame(buf.String(), []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'})
+	})
+	p.Stop("Done")
+}
+
+func TestWithSpinnerFramesEmptyUsesDefaults(t *testing.T) {
+	forceInteractive(t)
+
+	var buf lockedBuffer
+	p := pin.New("EmptyFrames", pin.WithWriter(&buf), pin.WithSpinnerFrames([]rune{}))
+	cancel := p.Start(context.Background())
+	defer cancel()
+
+	waitFor(t, func() bool {
+		return containsAnyFrame(buf.String(), []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'})
+	})
+	p.Stop("Done")
+}
+
+func TestWithSpinnerFramesCopiesInput(t *testing.T) {
+	forceInteractive(t)
+
+	var buf lockedBuffer
+	frames := []rune{'a'}
+	p := pin.New("CopiedFrames", pin.WithWriter(&buf), pin.WithSpinnerFrames(frames))
+	frames[0] = 'b'
+
+	cancel := p.Start(context.Background())
+	defer cancel()
+
+	waitFor(t, func() bool {
+		return strings.Contains(buf.String(), "a")
+	})
+	p.Stop("Done")
+
+	if strings.Contains(buf.String(), "b") {
+		t.Fatalf("expected spinner to use copied frame 'a', got %q", buf.String())
+	}
+}
+
+func TestWithWriterNilPreservesExistingWriter(t *testing.T) {
+	var buf bytes.Buffer
+	p := pin.New("PreservedWriter", pin.WithWriter(&buf), pin.WithWriter(nil))
+
+	cancel := p.Start(context.Background())
+	defer cancel()
+
+	if got := buf.String(); got != "PreservedWriter\n" {
+		t.Fatalf("expected nil writer option to preserve previous writer, got %q", got)
+	}
+}
+
+func TestConcurrentStartCreatesSingleRun(t *testing.T) {
+	var buf bytes.Buffer
+	p := pin.New("SingleRun", pin.WithWriter(&buf))
+
+	const starts = 20
+	cancels := make([]context.CancelFunc, starts)
+	var wg sync.WaitGroup
+	wg.Add(starts)
+	for i := 0; i < starts; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			cancels[i] = p.Start(context.Background())
+		}()
+	}
+	wg.Wait()
+	defer func() {
+		for _, cancel := range cancels {
+			if cancel != nil {
+				cancel()
+			}
+		}
+	}()
+
+	if got := strings.Count(buf.String(), "SingleRun\n"); got != 1 {
+		t.Fatalf("expected exactly one initial line, got %d in %q", got, buf.String())
+	}
+	if !p.IsRunning() {
+		t.Fatal("expected spinner to be running after concurrent starts")
+	}
+	p.Stop("Done")
+}
+
+func TestOldCancelDoesNotStopNewRun(t *testing.T) {
+	var buf bytes.Buffer
+	p := pin.New("Cancelable", pin.WithWriter(&buf))
+
+	oldCancel := p.Start(context.Background())
+	p.Stop("First")
+
+	newCancel := p.Start(context.Background())
+	oldCancel()
+
+	if !p.IsRunning() {
+		t.Fatal("old cancel stopped the newer run")
+	}
+	newCancel()
+	if p.IsRunning() {
+		t.Fatal("new cancel did not stop the current run")
+	}
+}
+
+func TestStopCleansUpNonInteractiveRunWithoutReturnedCancel(t *testing.T) {
+	var buf bytes.Buffer
+	p := pin.New("NonInteractive", pin.WithWriter(&buf))
+
+	_ = p.Start(context.Background())
+	p.Stop("Done")
+
+	if p.IsRunning() {
+		t.Fatal("expected Stop to end non-interactive run")
+	}
+
+	cancel := p.Start(context.Background())
+	defer cancel()
+	if !p.IsRunning() {
+		t.Fatal("expected spinner to start again after Stop")
+	}
+}
+
+func TestConcurrentStopAndFailPrintsOneFinalMessage(t *testing.T) {
+	forceInteractive(t)
+
+	var buf lockedBuffer
+	p := pin.New("ConcurrentFinish", pin.WithWriter(&buf), pin.WithSpinnerFrames([]rune{'x'}))
+	cancel := p.Start(context.Background())
+	defer cancel()
+	waitFor(t, func() bool {
+		return strings.Contains(buf.String(), "x")
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		p.Stop("done")
+	}()
+	go func() {
+		defer wg.Done()
+		p.Fail("fail")
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("concurrent Stop and Fail did not return")
+	}
+
+	output := buf.String()
+	finalCount := strings.Count(output, "done") + strings.Count(output, "fail")
+	if finalCount != 1 {
+		t.Fatalf("expected exactly one final message, got %d in %q", finalCount, output)
+	}
+}
+
+func TestRepeatedInteractiveStartAfterConcurrentStopHasNoStaleSignal(t *testing.T) {
+	forceInteractive(t)
+
+	var buf lockedBuffer
+	p := pin.New("Repeat", pin.WithWriter(&buf), pin.WithSpinnerFrames([]rune{'x'}))
+	cancel := p.Start(context.Background())
+	defer cancel()
+	waitFor(t, func() bool {
+		return strings.Contains(buf.String(), "x")
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		p.Stop("done")
+	}()
+	go func() {
+		defer wg.Done()
+		p.Fail("fail")
+	}()
+	wg.Wait()
+
+	before := buf.Len()
+	cancel = p.Start(context.Background())
+	defer cancel()
+	waitFor(t, func() bool {
+		return strings.Contains(buf.String()[before:], "x")
+	})
+	p.Stop("again")
+}
+
+func TestPositionRightUsesSpinnerColor(t *testing.T) {
+	forceInteractive(t)
+
+	var buf lockedBuffer
+	p := pin.New("Right",
+		pin.WithWriter(&buf),
+		pin.WithPosition(pin.PositionRight),
+		pin.WithSpinnerFrames([]rune{'x'}),
+		pin.WithSpinnerColor(pin.ColorCyan),
+		pin.WithTextColor(pin.ColorYellow),
+	)
+
+	cancel := p.Start(context.Background())
+	defer cancel()
+	waitFor(t, func() bool {
+		return strings.Contains(buf.String(), pin.ColorCyan.String()+"x"+pin.ColorReset.String())
+	})
+	p.Stop("Done")
+}
+
+func TestFailRespectsConfiguredWriter(t *testing.T) {
+	forceInteractive(t)
+
+	stdout := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = writer
+	defer func() {
+		os.Stdout = stdout
+	}()
+
+	var buf lockedBuffer
+	p := pin.New("FailWriter", pin.WithWriter(&buf), pin.WithSpinnerFrames([]rune{'x'}))
+	cancel := p.Start(context.Background())
+	defer cancel()
+	waitFor(t, func() bool {
+		return strings.Contains(buf.String(), "x")
+	})
+	p.Fail("failed")
+
+	_ = writer.Close()
+	stdoutBytes, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(stdoutBytes) != 0 {
+		t.Fatalf("expected Fail to avoid process stdout, got %q", string(stdoutBytes))
+	}
+	if !strings.Contains(buf.String(), "failed") {
+		t.Fatalf("expected failure output in configured writer, got %q", buf.String())
+	}
+}
+
+func containsAnyFrame(output string, frames []rune) bool {
+	for _, frame := range frames {
+		if strings.Contains(output, string(frame)) {
+			return true
+		}
+	}
+	return false
 }

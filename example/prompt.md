@@ -10,7 +10,7 @@ The `pin` library is a lightweight and customizable terminal spinner for Go appl
 - Dynamic message updates
 - Flexible positioning (spinner before or after the message)
 - Custom symbols for success or failure states
-- Automatic adjustment in non-interactive environments (animations are disabled when output is piped)
+- Automatic adjustment in non-interactive environments (animations are disabled when the configured writer is not a terminal)
 
 ## Installation:
 
@@ -19,6 +19,8 @@ To install the library, run:
 ```bash
 go get github.com/yarlson/pin
 ```
+
+`pin` requires Go 1.19 or later.
 
 ## Public API:
 
@@ -104,7 +106,7 @@ go get github.com/yarlson/pin
    - ```go
      func WithSpinnerFrames(frames []rune) Option
      ```
-     _Description:_ Sets the spinner's frames for custom animations.
+     _Description:_ Sets the spinner's frames for custom animations. Nil or empty slices keep the default frames.
    - ```go
      func WithFailSymbol(symbol rune) Option
      ```
@@ -121,6 +123,15 @@ go get github.com/yarlson/pin
      func WithWriter(w io.Writer) Option
      ```
      _Description:_ Redirects spinner output to a custom writer such as `os.Stderr`.
+
+   - ```go
+     func SetForceInteractive(enabled bool)
+     ```
+     _Description:_ Forces interactive rendering for non-terminal writers, mainly for tests and demos.
+   - ```go
+     func ForceInteractive() bool
+     ```
+     _Description:_ Reports whether forced interactive rendering is enabled.
 
 4. **Public Constants:**
 
@@ -211,9 +222,9 @@ go get github.com/yarlson/pin
        )
 
        // Start the spinner.
-       ctx, cancel := context.WithCancel(context.Background())
+       ctx := context.Background()
+       cancel := p.Start(ctx)
        defer cancel()
-       p.Start(ctx)
 
        // Update the spinner message while processing.
        time.Sleep(2 * time.Second)
@@ -245,9 +256,9 @@ go get github.com/yarlson/pin
        )
 
        // Start the spinner.
-       ctx, cancel := context.WithCancel(context.Background())
+       ctx := context.Background()
+       cancel := p.Start(ctx)
        defer cancel()
-       p.Start(ctx)
 
        // Simulate a failure scenario.
        time.Sleep(2 * time.Second)
@@ -275,9 +286,9 @@ go get github.com/yarlson/pin
        )
 
        // Start the spinner.
-       ctx, cancel := context.WithCancel(context.Background())
+       ctx := context.Background()
+       cancel := p.Start(ctx)
        defer cancel()
-       p.Start(ctx)
 
        // Simulate work.
        time.Sleep(3 * time.Second)
